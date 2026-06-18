@@ -52,13 +52,15 @@ export async function POST(req: NextRequest) {
 
   const stmt = db.prepare(`
     INSERT INTO leads
-      (company_name, company_number, sic_code, sic_label, website, phone, email,
+      (lead_name, contact_person, industry,
+       company_name, company_number, sic_code, sic_label, website, phone, email,
        source, lead_score, status, stage, location, postcode, incorporated, notes, assigned_to, created_by, vertical,
        contact_name, linkedin_url,
        eng_score, eng_grade, eng_sector, employee_count,
        linkedin_hiring, decision_maker_role, growth_signal, linkedin_engagement)
     VALUES
-      (@company_name, @company_number, @sic_code, @sic_label, @website, @phone, @email,
+      (@lead_name, @contact_person, @industry,
+       @company_name, @company_number, @sic_code, @sic_label, @website, @phone, @email,
        @source, @lead_score, @status, @stage, @location, @postcode, @incorporated, @notes, @assigned_to, @created_by, @vertical,
        @contact_name, @linkedin_url,
        @eng_score, @eng_grade, @eng_sector, @employee_count,
@@ -66,6 +68,9 @@ export async function POST(req: NextRequest) {
   `);
 
   const result = stmt.run({
+    lead_name:           body.lead_name           ?? null,
+    contact_person:      body.contact_person      ?? body.contact_name ?? null,
+    industry:            body.industry            ?? body.sic_label ?? null,
     company_name:        body.company_name        ?? 'Unknown',
     company_number:      body.company_number      ?? null,
     sic_code:            body.sic_code            ?? null,

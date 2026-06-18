@@ -163,15 +163,20 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS quotes (
       id           INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_id      INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+      company_id   INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      contact_id   INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      opportunity_id INTEGER REFERENCES opportunities(id) ON DELETE SET NULL,
       quote_number TEXT    NOT NULL UNIQUE,
       status       TEXT    NOT NULL DEFAULT 'draft',
       customer     TEXT    NOT NULL,
       address      TEXT,
       email        TEXT,
+      issue_date   TEXT    NOT NULL DEFAULT (datetime('now')),
       subtotal     REAL    NOT NULL DEFAULT 0,
       vat_rate     REAL    NOT NULL DEFAULT 20,
       vat_amount   REAL    NOT NULL DEFAULT 0,
       total        REAL    NOT NULL DEFAULT 0,
+      total_amount REAL    NOT NULL DEFAULT 0,
       terms        TEXT    DEFAULT '30 days',
       notes        TEXT,
       expiry_date  TEXT,
@@ -182,11 +187,90 @@ function initSchema(db: Database.Database) {
     CREATE TABLE IF NOT EXISTS quote_items (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       quote_id    INTEGER NOT NULL REFERENCES quotes(id) ON DELETE CASCADE,
+      product     TEXT,
       description TEXT    NOT NULL,
       quantity    REAL    NOT NULL DEFAULT 1,
       unit_price  REAL    NOT NULL DEFAULT 0,
+      discount    REAL    NOT NULL DEFAULT 0,
+      tax         REAL    NOT NULL DEFAULT 0,
+      total       REAL    NOT NULL DEFAULT 0,
       amount      REAL    NOT NULL DEFAULT 0
     );
+
+    CREATE TABLE IF NOT EXISTS pipelines (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      name        TEXT    NOT NULL UNIQUE,
+      description TEXT,
+      sort_order  INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS pipeline_stages (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      pipeline_id     INTEGER NOT NULL REFERENCES pipelines(id) ON DELETE CASCADE,
+      name            TEXT    NOT NULL,
+      sort_order      INTEGER NOT NULL DEFAULT 1,
+      is_closed       INTEGER NOT NULL DEFAULT 0,
+      is_won          INTEGER NOT NULL DEFAULT 0,
+      default_probability INTEGER NOT NULL DEFAULT 0,
+      created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(pipeline_id, name)
+    );
+
+    CREATE TABLE IF NOT EXISTS opportunities (
+      id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+      opportunity_name    TEXT    NOT NULL,
+      company_id          INTEGER REFERENCES companies(id) ON DELETE SET NULL,
+      contact_id          INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      lead_id             INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+      pipeline_id         INTEGER REFERENCES pipelines(id) ON DELETE SET NULL,
+      stage_id            INTEGER REFERENCES pipeline_stages(id) ON DELETE SET NULL,
+      estimated_value     REAL    NOT NULL DEFAULT 0,
+      probability         INTEGER NOT NULL DEFAULT 0,
+      expected_close_date TEXT,
+      assigned_user       INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      status              TEXT    NOT NULL DEFAULT 'open',
+      notes               TEXT,
+      created_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at          TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS follow_ups (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id         INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+      opportunity_id  INTEGER REFERENCES opportunities(id) ON DELETE CASCADE,
+      contact_id      INTEGER REFERENCES contacts(id) ON DELETE SET NULL,
+      follow_up_date  TEXT    NOT NULL,
+      follow_up_type  TEXT    NOT NULL,
+      reminder_at     TEXT,
+      assigned_user   INTEGER REFERENCES users(id) ON DELETE SET NULL,
+      comments        TEXT,
+      status          TEXT    NOT NULL DEFAULT 'pending',
+      task_id         INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+      created_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at      TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS email_history (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      lead_id          INTEGER REFERENCES leads(id) ON DELETE SET NULL,
+      opportunity_id   INTEGER REFERENCES opportunities(id) ON DELETE SET NULL,
+      quote_id         INTEGER REFERENCES quotes(id) ON DELETE SET NULL,
+      to_email         TEXT    NOT NULL,
+      subject          TEXT    NOT NULL,
+      body             TEXT    NOT NULL,
+      attachments_json TEXT,
+      sent_at          TEXT    NOT NULL DEFAULT (datetime('now')),
+      created_by       INTEGER REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_pipeline_stages_pipeline ON pipeline_stages(pipeline_id, sort_order);
+    CREATE INDEX IF NOT EXISTS idx_opportunities_pipeline_stage ON opportunities(pipeline_id, stage_id);
+    CREATE INDEX IF NOT EXISTS idx_opportunities_company ON opportunities(company_id);
+    CREATE INDEX IF NOT EXISTS idx_follow_ups_date ON follow_ups(follow_up_date);
+    CREATE INDEX IF NOT EXISTS idx_email_history_quote ON email_history(quote_id);
 
     CREATE TABLE IF NOT EXISTS linkedin_tokens (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -348,6 +432,15 @@ function initSchema(db: Database.Database) {
   if (!colNames.includes('upwork_proposal_status')) {
     db.exec(`ALTER TABLE leads ADD COLUMN upwork_proposal_status TEXT`);
   }
+  if (!colNames.includes('lead_name')) {
+    db.exec(`ALTER TABLE leads ADD COLUMN lead_name TEXT`);
+  }
+  if (!colNames.includes('contact_person')) {
+    db.exec(`ALTER TABLE leads ADD COLUMN contact_person TEXT`);
+  }
+  if (!colNames.includes('industry')) {
+    db.exec(`ALTER TABLE leads ADD COLUMN industry TEXT`);
+  }
 
   // ── Vertical normalisation migration ─────────────────────────────────────
   // legacy values → current vertical taxonomy
@@ -439,6 +532,65 @@ function initSchema(db: Database.Database) {
   }
   if (campaignCols.length > 0 && !campaignColNames.includes('services_json')) {
     db.exec(`ALTER TABLE campaigns ADD COLUMN services_json TEXT`);
+  }
+
+  const quoteCols = db.prepare(`PRAGMA table_info(quotes)`).all() as { name: string }[];
+  const quoteColNames = quoteCols.map(c => c.name);
+  if (quoteCols.length > 0 && !quoteColNames.includes('company_id')) {
+    db.exec(`ALTER TABLE quotes ADD COLUMN company_id INTEGER REFERENCES companies(id) ON DELETE SET NULL`);
+  }
+  if (quoteCols.length > 0 && !quoteColNames.includes('contact_id')) {
+    db.exec(`ALTER TABLE quotes ADD COLUMN contact_id INTEGER REFERENCES contacts(id) ON DELETE SET NULL`);
+  }
+  if (quoteCols.length > 0 && !quoteColNames.includes('opportunity_id')) {
+    db.exec(`ALTER TABLE quotes ADD COLUMN opportunity_id INTEGER REFERENCES opportunities(id) ON DELETE SET NULL`);
+  }
+  if (quoteCols.length > 0 && !quoteColNames.includes('issue_date')) {
+    db.exec(`ALTER TABLE quotes ADD COLUMN issue_date TEXT`);
+    db.exec(`UPDATE quotes SET issue_date = created_at WHERE issue_date IS NULL`);
+  }
+  if (quoteCols.length > 0 && !quoteColNames.includes('total_amount')) {
+    db.exec(`ALTER TABLE quotes ADD COLUMN total_amount REAL NOT NULL DEFAULT 0`);
+    db.exec(`UPDATE quotes SET total_amount = total WHERE total_amount = 0`);
+  }
+
+  const quoteItemCols = db.prepare(`PRAGMA table_info(quote_items)`).all() as { name: string }[];
+  const quoteItemColNames = quoteItemCols.map(c => c.name);
+  if (quoteItemCols.length > 0 && !quoteItemColNames.includes('product')) {
+    db.exec(`ALTER TABLE quote_items ADD COLUMN product TEXT`);
+  }
+  if (quoteItemCols.length > 0 && !quoteItemColNames.includes('discount')) {
+    db.exec(`ALTER TABLE quote_items ADD COLUMN discount REAL NOT NULL DEFAULT 0`);
+  }
+  if (quoteItemCols.length > 0 && !quoteItemColNames.includes('tax')) {
+    db.exec(`ALTER TABLE quote_items ADD COLUMN tax REAL NOT NULL DEFAULT 0`);
+  }
+  if (quoteItemCols.length > 0 && !quoteItemColNames.includes('total')) {
+    db.exec(`ALTER TABLE quote_items ADD COLUMN total REAL NOT NULL DEFAULT 0`);
+    db.exec(`UPDATE quote_items SET total = amount WHERE total = 0`);
+  }
+
+  const pipelineCount = (db.prepare(`SELECT COUNT(*) as c FROM pipelines`).get() as { c: number }).c;
+  if (pipelineCount === 0) {
+    const inserted = db.prepare(`
+      INSERT INTO pipelines (name, description, sort_order, updated_at)
+      VALUES ('Default Sales Pipeline', 'Default pipeline for Sales workflow', 1, datetime('now'))
+    `).run();
+    const pipelineId = Number(inserted.lastInsertRowid);
+    const stageStmt = db.prepare(`
+      INSERT INTO pipeline_stages (pipeline_id, name, sort_order, is_closed, is_won, default_probability, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    `);
+    const defaults: Array<[string, number, number, number, number]> = [
+      ['Discovery', 1, 0, 0, 20],
+      ['Proposal', 2, 0, 0, 50],
+      ['Negotiation', 3, 0, 0, 75],
+      ['Won', 4, 1, 1, 100],
+      ['Lost', 5, 1, 0, 0],
+    ];
+    for (const [name, sortOrder, isClosed, isWon, probability] of defaults) {
+      stageStmt.run(pipelineId, name, sortOrder, isClosed, isWon, probability);
+    }
   }
 
   // Seed default outreach templates per vertical/channel

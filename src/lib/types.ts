@@ -1,9 +1,11 @@
 export type UserRole = 'admin' | 'user';
-export type LeadStatus = 'new' | 'qualified' | 'rejected';
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'disqualified' | 'rejected';
 export type LeadStage =
   | 'prospect'
   | 'lead'
   | 'contacted'
+  | 'discovery'
+  | 'proposal'
   | 'meeting_scheduled'
   | 'requirements'
   | 'proposal_sent'
@@ -39,6 +41,9 @@ export interface User {
 
 export interface Lead {
   id: number;
+  lead_name: string | null;
+  contact_person: string | null;
+  industry: string | null;
   company_id: number | null;
   company_name: string;
   company_number: string | null;
@@ -212,15 +217,74 @@ export interface Quote {
 export interface QuoteItem {
   id: number;
   quote_id: number;
+  product?: string | null;
   description: string;
   quantity: number;
   unit_price: number;
+  discount?: number;
+  tax?: number;
+  total?: number;
   vat_rate: number;
 }
 
 export type QuoteDetail = Quote & {
   items: QuoteItem[];
 };
+
+export interface Pipeline {
+  id: number;
+  name: string;
+  description: string | null;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PipelineStage {
+  id: number;
+  pipeline_id: number;
+  name: string;
+  sort_order: number;
+  is_closed: number;
+  is_won: number;
+  default_probability: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Opportunity {
+  id: number;
+  opportunity_name: string;
+  company_id: number | null;
+  contact_id: number | null;
+  lead_id: number | null;
+  pipeline_id: number | null;
+  stage_id: number | null;
+  estimated_value: number;
+  probability: number;
+  expected_close_date: string | null;
+  assigned_user: number | null;
+  status: 'open' | 'won' | 'lost';
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface FollowUp {
+  id: number;
+  lead_id: number | null;
+  opportunity_id: number | null;
+  contact_id: number | null;
+  follow_up_date: string;
+  follow_up_type: 'Call' | 'Meeting' | 'Email' | 'WhatsApp' | string;
+  reminder_at: string | null;
+  assigned_user: number | null;
+  comments: string | null;
+  status: 'pending' | 'done' | string;
+  task_id: number | null;
+  created_at: string;
+  updated_at: string;
+}
 
 export const PIPELINE_STAGES: { key: LeadStage; label: string }[] = [
   { key: 'prospect', label: 'Prospect' },
