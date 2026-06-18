@@ -55,6 +55,8 @@ export async function POST(req: NextRequest) {
       (lead_name, contact_person, industry,
        company_name, company_number, sic_code, sic_label, website, phone, email,
        source, lead_score, status, stage, location, postcode, incorporated, notes, assigned_to, created_by, vertical,
+       created_at, next_followup_date,
+       opportunity_value, interest_level,
        contact_name, linkedin_url,
        eng_score, eng_grade, eng_sector, employee_count,
        linkedin_hiring, decision_maker_role, growth_signal, linkedin_engagement)
@@ -62,6 +64,8 @@ export async function POST(req: NextRequest) {
       (@lead_name, @contact_person, @industry,
        @company_name, @company_number, @sic_code, @sic_label, @website, @phone, @email,
        @source, @lead_score, @status, @stage, @location, @postcode, @incorporated, @notes, @assigned_to, @created_by, @vertical,
+       COALESCE(@created_at, datetime('now')), @next_followup_date,
+       @opportunity_value, @interest_level,
        @contact_name, @linkedin_url,
        @eng_score, @eng_grade, @eng_sector, @employee_count,
        @linkedin_hiring, @decision_maker_role, @growth_signal, @linkedin_engagement)
@@ -89,6 +93,10 @@ export async function POST(req: NextRequest) {
     assigned_to:         body.assigned_to         ?? (session.user as any)?.id ?? null,
     created_by:          (session.user as any)?.id ?? null,
     vertical:            body.vertical            ?? 'crm',
+    created_at:          body.created_at          ?? null,
+    next_followup_date:  body.next_followup_date  ?? null,
+    opportunity_value:   body.opportunity_value   ?? null,
+    interest_level:      body.interest_level      ?? null,
     contact_name:        body.contact_name        ?? null,
     linkedin_url:        body.linkedin_url        ?? null,
     eng_score:           body.eng_score           ?? null,

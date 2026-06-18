@@ -442,6 +442,12 @@ function initSchema(db: Database.Database) {
     db.exec(`ALTER TABLE leads ADD COLUMN industry TEXT`);
   }
 
+  const opportunityCols = db.prepare(`PRAGMA table_info(opportunities)`).all() as { name: string }[];
+  const opportunityColNames = opportunityCols.map(c => c.name);
+  if (!opportunityColNames.includes('won_at')) {
+    db.exec(`ALTER TABLE opportunities ADD COLUMN won_at TEXT`);
+  }
+
   // ── Vertical normalisation migration ─────────────────────────────────────
   // legacy values → current vertical taxonomy
   db.exec(`UPDATE leads SET vertical = 'iot' WHERE vertical = 'industry_4_0'`);

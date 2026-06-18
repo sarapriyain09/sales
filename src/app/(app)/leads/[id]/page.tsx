@@ -522,6 +522,8 @@ export default function LeadDetailPage() {
               ['Location',     lead.location],
               ['Postcode',     lead.postcode],
               ['Incorporated', lead.incorporated],
+              ['Value (£)',    lead.opportunity_value != null ? String(lead.opportunity_value) : null],
+              ['Nature of Job',lead.interest_level],
               ['Source',       lead.source?.replace('_',' ')],
             ].map(([k,v]) => v ? (
               <div key={k as string} className="flex gap-2">
@@ -545,6 +547,12 @@ export default function LeadDetailPage() {
                 {LEAD_VERTICALS.map(v => <option key={v.key} value={v.key}>{v.label}</option>)}
               </select>
             </div>
+            {lead.notes && (
+              <div className="pt-2 border-t border-slate-800/70">
+                <div className="text-xs text-slate-500 mb-1">Detail of Work</div>
+                <div className="text-sm text-slate-200 whitespace-pre-wrap">{lead.notes}</div>
+              </div>
+            )}
           </div>
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-5 space-y-3">
             <h3 className="text-sm font-semibold text-slate-300">Lead Score</h3>

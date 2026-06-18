@@ -10,6 +10,8 @@ type DashboardData = {
   closedRevenue: number;
   winRate: number;
   monthlySales: Array<{ month: string; won_value: number }>;
+  opportunitiesByCreatedMonth: Array<{ month: string; opp_count: number; total_value: number }>;
+  opportunitiesByWinMonth: Array<{ month: string; won_count: number; won_value: number }>;
   upcomingFollowUps: Array<{ id: number; follow_up_date: string; follow_up_type: string; company_name?: string | null; opportunity_name?: string | null }>;
   recentActivities: Array<{ id: number; activity_type: string; date: string; company_name?: string | null; notes?: string | null }>;
 };
@@ -26,6 +28,8 @@ export default function SalesDashboardPage() {
   }, []);
 
   const leadTotal = useMemo(() => (data?.leadsByStatus ?? []).reduce((sum, row) => sum + Number(row.count), 0), [data]);
+  const opportunitiesByCreatedMonth = data?.opportunitiesByCreatedMonth ?? [];
+  const opportunitiesByWinMonth = data?.opportunitiesByWinMonth ?? [];
 
   if (!data) {
     return <div className="text-sm text-slate-500">Loading sales dashboard...</div>;
@@ -100,6 +104,42 @@ export default function SalesDashboardPage() {
                 <span className="text-emerald-300">{money(Number(row.won_value || 0))}</span>
               </div>
             ))}
+          </div>
+        </div>
+
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-4">
+          <h2 className="text-sm font-semibold text-slate-300 mb-3">Month-wise opportunities</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <div className="text-xs text-slate-500 mb-2">By Created Date</div>
+              <div className="space-y-2">
+                {opportunitiesByCreatedMonth.length === 0 && <div className="text-sm text-slate-500">No opportunity data.</div>}
+                {opportunitiesByCreatedMonth.map((row) => (
+                  <div key={`created-${row.month}`} className="text-sm border-b border-slate-800 pb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">{row.month}</span>
+                      <span className="text-slate-200 font-medium">{Number(row.opp_count)} opp</span>
+                    </div>
+                    <div className="text-xs text-slate-500">Value: {money(Number(row.total_value || 0))}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="text-xs text-slate-500 mb-2">By Win Date</div>
+              <div className="space-y-2">
+                {opportunitiesByWinMonth.length === 0 && <div className="text-sm text-slate-500">No won opportunities yet.</div>}
+                {opportunitiesByWinMonth.map((row) => (
+                  <div key={`won-${row.month}`} className="text-sm border-b border-slate-800 pb-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-400">{row.month}</span>
+                      <span className="text-emerald-300 font-medium">{Number(row.won_count)} won</span>
+                    </div>
+                    <div className="text-xs text-slate-500">Revenue: {money(Number(row.won_value || 0))}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
 

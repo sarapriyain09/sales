@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 
 type SalesLead = {
   id: number;
@@ -65,6 +66,12 @@ export default function SalesLeadsPage() {
           <h1 className="text-xl font-bold text-slate-100">Sales Leads</h1>
           <p className="text-sm text-slate-500">Lead → Qualified → Opportunity conversion queue.</p>
         </div>
+        <Link
+          href="/leads/new"
+          className="px-3 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-500"
+        >
+          + Add Lead
+        </Link>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-wrap gap-2">

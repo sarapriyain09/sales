@@ -28,9 +28,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     SET stage_id = ?,
         status = ?,
         probability = CASE WHEN probability = 0 THEN ? ELSE probability END,
+        won_at = CASE
+          WHEN ? = 'won' THEN COALESCE(won_at, datetime('now'))
+          ELSE NULL
+        END,
         updated_at = datetime('now')
     WHERE id = ?
-  `).run(stage.id, nextStatus, stage.default_probability, opportunityId);
+  `).run(stage.id, nextStatus, stage.default_probability, nextStatus, opportunityId);
 
   const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(opportunityId);
   return NextResponse.json(updated);

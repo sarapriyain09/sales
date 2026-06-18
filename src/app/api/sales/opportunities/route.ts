@@ -117,10 +117,10 @@ export async function POST(req: NextRequest) {
   const result = db.prepare(`
     INSERT INTO opportunities (
       opportunity_name, company_id, contact_id, lead_id, pipeline_id, stage_id,
-      estimated_value, probability, expected_close_date, assigned_user, status, notes, updated_at
+      estimated_value, probability, expected_close_date, assigned_user, status, notes, won_at, updated_at
     ) VALUES (
       @opportunity_name, @company_id, @contact_id, @lead_id, @pipeline_id, @stage_id,
-      @estimated_value, @probability, @expected_close_date, @assigned_user, @status, @notes, datetime('now')
+      @estimated_value, @probability, @expected_close_date, @assigned_user, @status, @notes, @won_at, datetime('now')
     )
   `).run({
     opportunity_name: opportunityName,
@@ -135,6 +135,7 @@ export async function POST(req: NextRequest) {
     assigned_user: body.assigned_user ?? (session.user as { id?: number | string } | undefined)?.id ?? null,
     status: (body.status ?? 'open').toLowerCase(),
     notes: body.notes ?? null,
+    won_at: (body.status ?? 'open').toLowerCase() === 'won' ? new Date().toISOString() : null,
   });
 
   const created = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(result.lastInsertRowid);

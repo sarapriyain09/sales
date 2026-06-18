@@ -56,6 +56,28 @@ export async function GET() {
     LIMIT 12
   `).all().reverse();
 
+  const opportunitiesByCreatedMonth = db.prepare(`
+    SELECT strftime('%Y-%m', created_at) AS month,
+           COUNT(*) AS opp_count,
+           ROUND(COALESCE(SUM(estimated_value), 0), 2) AS total_value
+    FROM opportunities
+    GROUP BY month
+    ORDER BY month DESC
+    LIMIT 12
+  `).all().reverse();
+
+  const opportunitiesByWinMonth = db.prepare(`
+    SELECT strftime('%Y-%m', COALESCE(won_at, updated_at)) AS month,
+           COUNT(*) AS won_count,
+           ROUND(COALESCE(SUM(estimated_value), 0), 2) AS won_value
+    FROM opportunities
+    WHERE status = 'won'
+      AND COALESCE(won_at, updated_at) IS NOT NULL
+    GROUP BY month
+    ORDER BY month DESC
+    LIMIT 12
+  `).all().reverse();
+
   const upcomingFollowUps = db.prepare(`
     SELECT f.*, o.opportunity_name, l.company_name, c.name AS contact_name
     FROM follow_ups f
@@ -85,6 +107,8 @@ export async function GET() {
     closedRevenue,
     winRate,
     monthlySales,
+    opportunitiesByCreatedMonth,
+    opportunitiesByWinMonth,
     upcomingFollowUps,
     recentActivities,
   });

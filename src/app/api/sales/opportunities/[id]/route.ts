@@ -54,6 +54,15 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const setClause = fields.map(f => `${f} = @${f}`).join(', ');
   db.prepare(`UPDATE opportunities SET ${setClause}, updated_at = datetime('now') WHERE id = @id`).run({ ...body, id });
 
+  if (Object.prototype.hasOwnProperty.call(body, 'status')) {
+    const status = String(body.status ?? '').toLowerCase();
+    if (status === 'won') {
+      db.prepare(`UPDATE opportunities SET won_at = COALESCE(won_at, datetime('now')) WHERE id = ?`).run(id);
+    } else {
+      db.prepare(`UPDATE opportunities SET won_at = NULL WHERE id = ?`).run(id);
+    }
+  }
+
   const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(id);
   return NextResponse.json(updated);
 }
