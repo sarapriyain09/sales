@@ -14,6 +14,7 @@ interface ImportBody {
   vertical?: string;
   notes?: string;
   followupDate?: string;
+  createOpportunity?: boolean;
 }
 
 const ALLOWED_STATUSES = ['upwork_prospect', 'proposal_sent', 'interview', 'opportunity', 'won', 'lost'];
@@ -82,6 +83,42 @@ export async function POST(req: NextRequest) {
     VALUES (?, ?, ?, 0, datetime('now'))
   `).run(leadId, 'Upwork follow-up', followupDate);
 
+  const shouldCreateOpportunity = body.createOpportunity === true;
+  if (shouldCreateOpportunity) {
+    const statusLower = proposalStatus.toLowerCase();
+    const oppStatus = statusLower === 'won' ? 'won' : statusLower === 'lost' ? 'lost' : 'open';
+
+    // Best-effort numeric extraction from budget text like "$500" or "$500-$1000".
+    const numericBudget = Number(((body.budget ?? '').match(/[0-9]+(?:\.[0-9]+)?/g) ?? [])[0] ?? 0);
+
+    const defaultPipeline = db.prepare('SELECT id FROM pipelines ORDER BY sort_order ASC, id ASC LIMIT 1').get() as { id: number } | undefined;
+    const defaultStage = defaultPipeline
+      ? db.prepare('SELECT id, default_probability FROM pipeline_stages WHERE pipeline_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1').get(defaultPipeline.id) as { id: number; default_probability: number } | undefined
+      : undefined;
+
+    db.prepare(`
+      INSERT INTO opportunities (
+        opportunity_name, lead_id, pipeline_id, stage_id,
+        estimated_value, probability, expected_close_date, status, notes, won_at, updated_at
+      ) VALUES (
+        @opportunity_name, @lead_id, @pipeline_id, @stage_id,
+        @estimated_value, @probability, @expected_close_date, @status, @notes,
+        CASE WHEN @status = 'won' THEN datetime('now') ELSE NULL END,
+        datetime('now')
+      )
+    `).run({
+      opportunity_name: projectTitle,
+      lead_id: leadId,
+      pipeline_id: defaultPipeline?.id ?? null,
+      stage_id: defaultStage?.id ?? null,
+      estimated_value: Number.isFinite(numericBudget) ? numericBudget : 0,
+      probability: defaultStage?.default_probability ?? 0,
+      expected_close_date: followupDate,
+      status: oppStatus,
+      notes: leadNotes || null,
+    });
+  }
+
   const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId);
-  return NextResponse.json({ ok: true, lead }, { status: 201 });
+  return NextResponse.json({ ok: true, lead, opportunityCreated: shouldCreateOpportunity }, { status: 201 });
 }

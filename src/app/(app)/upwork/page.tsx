@@ -45,6 +45,7 @@ export default function UpworkPage() {
     vertical: 'software',
     notes: '',
     followupDate: '',
+    createOpportunity: true,
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
@@ -70,7 +71,7 @@ export default function UpworkPage() {
     load();
   }, []);
 
-  function setField(k: string, v: string) {
+  function setField(k: string, v: string | boolean) {
     setForm(prev => ({ ...prev, [k]: v }));
   }
 
@@ -89,7 +90,7 @@ export default function UpworkPage() {
       if (!res.ok) {
         setError(data.error ?? 'Import failed.');
       } else {
-        setSuccess('Upwork lead imported and follow-up task created.');
+        setSuccess(data.opportunityCreated ? 'Upwork lead imported, follow-up task created, and opportunity created.' : 'Upwork lead imported and follow-up task created.');
         setForm(prev => ({ ...prev, clientName: '', company: '', projectTitle: '', projectUrl: '', budget: '', notes: '' }));
         await load();
       }
@@ -137,6 +138,16 @@ export default function UpworkPage() {
           <input type="date" value={form.followupDate} onChange={e => setField('followupDate', e.target.value)} className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" />
           <input value={form.notes} onChange={e => setField('notes', e.target.value)} placeholder="Notes" className="bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-100" />
         </div>
+
+        <label className="flex items-center gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={form.createOpportunity}
+            onChange={e => setField('createOpportunity', e.target.checked)}
+            className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+          />
+          Create linked opportunity on import
+        </label>
 
         <button type="submit" disabled={saving} className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:bg-slate-700 text-white text-sm rounded-lg font-semibold">
           {saving ? 'Importing...' : 'Import from Upwork'}
