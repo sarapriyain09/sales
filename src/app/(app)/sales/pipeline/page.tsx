@@ -3,11 +3,13 @@ import { useEffect, useState } from 'react';
 
 type Pipeline = { id: number; name: string; description: string | null; sort_order: number };
 type Stage = { id: number; name: string; sort_order: number; is_closed: number; is_won: number; default_probability: number };
+type Opportunity = { id: number; pipeline_id: number | null; stage_id: number | null; estimated_value: number | null; probability: number | null; status: string | null };
 
 export default function SalesPipelinePage() {
   const [pipelines, setPipelines] = useState<Pipeline[]>([]);
   const [selectedPipelineId, setSelectedPipelineId] = useState<number | null>(null);
   const [stages, setStages] = useState<Stage[]>([]);
+  const [opportunities, setOpportunities] = useState<Opportunity[]>([]);
   const [newPipelineName, setNewPipelineName] = useState('');
 
   async function loadPipelines() {
@@ -26,8 +28,15 @@ export default function SalesPipelinePage() {
     setStages(Array.isArray(data) ? data : []);
   }
 
+  async function loadOpportunities() {
+    const res = await fetch('/api/sales/opportunities');
+    const data = await res.json();
+    setOpportunities(Array.isArray(data) ? data : []);
+  }
+
   useEffect(() => {
     loadPipelines();
+    loadOpportunities();
   }, []);
 
   useEffect(() => {
@@ -90,9 +99,30 @@ export default function SalesPipelinePage() {
 
     if (res.ok) {
       await loadStages(selectedPipelineId);
+      await loadOpportunities();
       alert('Stages saved');
     }
   }
+
+  const gbp = (n: number) => `GBP ${Math.round(n).toLocaleString('en-GB')}`;
+  const pipelineOpps = opportunities.filter(
+    (o) => o.pipeline_id === selectedPipelineId && (o.status ?? 'open').toLowerCase() === 'open'
+  );
+  const stageSummary = stages.map((stage) => {
+    const stageOpps = pipelineOpps.filter((o) => o.stage_id === stage.id);
+    const value = stageOpps.reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0);
+    const weighted = stageOpps.reduce(
+      (sum, o) => sum + (Number(o.estimated_value) || 0) * ((Number(o.probability) || 0) / 100),
+      0
+    );
+    return { stage, count: stageOpps.length, value, weighted };
+  });
+  const totalCount = pipelineOpps.length;
+  const totalValue = pipelineOpps.reduce((sum, o) => sum + (Number(o.estimated_value) || 0), 0);
+  const totalWeighted = pipelineOpps.reduce(
+    (sum, o) => sum + (Number(o.estimated_value) || 0) * ((Number(o.probability) || 0) / 100),
+    0
+  );
 
   return (
     <div className="space-y-4">
@@ -116,6 +146,27 @@ export default function SalesPipelinePage() {
             {pipeline.name}
           </button>
         ))}
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-sm font-semibold text-slate-300">Pipeline overview</h2>
+          <div className="text-xs text-slate-500">
+            {totalCount} open &middot; {gbp(totalValue)} total &middot; {gbp(totalWeighted)} weighted
+          </div>
+        </div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+          {stageSummary.map(({ stage, count, value, weighted }) => (
+            <div key={stage.id} className="bg-slate-900 border border-slate-800 rounded-xl p-3">
+              <div className="text-xs text-slate-400 truncate" title={stage.name}>{stage.name}</div>
+              <div className="text-lg font-bold text-slate-100">{gbp(value)}</div>
+              <div className="text-xs text-slate-500">{count} open &middot; {gbp(weighted)} weighted</div>
+            </div>
+          ))}
+          {stageSummary.length === 0 && (
+            <div className="text-xs text-slate-500">No stages configured yet.</div>
+          )}
+        </div>
       </div>
 
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
