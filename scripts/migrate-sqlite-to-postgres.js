@@ -201,11 +201,23 @@ async function main() {
   const client = await pool.connect();
 
   try {
-    const tables = sqlite
+    const allTables = sqlite
       .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
       .all()
       .map((r) => r.name)
       .filter(Boolean);
+
+    // Optional MIGRATE_TABLES env (comma-separated) restricts migration to a
+    // subset of tables. Used when sharing one Postgres DB across apps so we only
+    // add app-specific tables without touching tables owned by another app.
+    const onlyTables = (process.env.MIGRATE_TABLES || '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const tables = onlyTables.length
+      ? allTables.filter((t) => onlyTables.includes(t))
+      : allTables;
+
 
     if (!tables.length) {
       console.log('No tables found in SQLite source.');
