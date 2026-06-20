@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement, withTransaction } from '@/lib/db-client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   const fromDate = searchParams.get('from_date');
   const toDate = searchParams.get('to_date');
 
-  const db = getDb();
   let sql = `
     SELECT f.*, u.name AS assigned_user_name, o.opportunity_name, l.company_name, c.name AS contact_name
     FROM follow_ups f
@@ -44,7 +43,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' ORDER BY f.follow_up_date ASC, f.created_at DESC';
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = await queryAll(sql, params);
   return NextResponse.json(rows);
 }
 
@@ -67,17 +66,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'follow_up_date and follow_up_type are required' }, { status: 400 });
   }
 
-  const db = getDb();
   const assignedUser = body.assigned_user ?? (session.user as { id?: number | string } | undefined)?.id ?? null;
 
-  const tx = db.transaction(() => {
+  const followUpId = await withTransaction(async () => {
     const taskTitle = `[Follow-up] ${body.follow_up_type}${body.comments ? ` - ${body.comments}` : ''}`;
-    const taskResult = db.prepare(`
+    const taskResult = await runStatement(`
       INSERT INTO tasks (lead_id, user_id, title, due_date, done)
       VALUES (?, ?, ?, ?, 0)
-    `).run(body.lead_id ?? null, assignedUser, taskTitle.slice(0, 220), body.follow_up_date);
+    `, [body.lead_id ?? null, assignedUser, taskTitle.slice(0, 220), body.follow_up_date!]);
 
-    const followResult = db.prepare(`
+    const followResult = await runStatement(`
       INSERT INTO follow_ups (
         lead_id, opportunity_id, contact_id, follow_up_date, follow_up_type,
         reminder_at, assigned_user, comments, task_id, updated_at
@@ -85,30 +83,29 @@ export async function POST(req: NextRequest) {
         @lead_id, @opportunity_id, @contact_id, @follow_up_date, @follow_up_type,
         @reminder_at, @assigned_user, @comments, @task_id, datetime('now')
       )
-    `).run({
+    `, {
       lead_id: body.lead_id ?? null,
       opportunity_id: body.opportunity_id ?? null,
       contact_id: body.contact_id ?? null,
-      follow_up_date: body.follow_up_date,
-      follow_up_type: body.follow_up_type,
+      follow_up_date: body.follow_up_date!,
+      follow_up_type: body.follow_up_type!,
       reminder_at: body.reminder_at ?? null,
       assigned_user: assignedUser,
       comments: body.comments ?? null,
-      task_id: taskResult.lastInsertRowid,
+      task_id: Number(taskResult.lastInsertId),
     });
 
     if (body.lead_id) {
-      db.prepare(`
+      await runStatement(`
         INSERT INTO activities (lead_id, contact_id, activity_type, date, notes)
         VALUES (?, ?, 'follow_up', datetime('now'), ?)
-      `).run(body.lead_id, body.contact_id ?? null, `${body.follow_up_type}: ${body.comments ?? ''}`.trim());
+      `, [body.lead_id, body.contact_id ?? null, `${body.follow_up_type}: ${body.comments ?? ''}`.trim()]);
     }
 
-    return followResult.lastInsertRowid;
+    return Number(followResult.lastInsertId);
   });
 
-  const followUpId = tx();
-  const created = db.prepare('SELECT * FROM follow_ups WHERE id = ?').get(followUpId);
+  const created = await queryOne('SELECT * FROM follow_ups WHERE id = ?', [followUpId]);
 
   return NextResponse.json(created, { status: 201 });
 }

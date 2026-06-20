@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll } from '@/lib/db-client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -13,7 +13,6 @@ export async function GET(req: NextRequest) {
   const source = searchParams.get('source');
   const industry = searchParams.get('industry');
 
-  const db = getDb();
   let sql = `
     SELECT l.*, u.name AS assigned_user_name
     FROM leads l
@@ -41,6 +40,6 @@ export async function GET(req: NextRequest) {
 
   sql += ' ORDER BY l.created_at DESC';
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = await queryAll(sql, params);
   return NextResponse.json(rows);
 }

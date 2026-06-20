@@ -10,11 +10,11 @@ export async function GET() {
 
   const userId = (session.user as any).id as number;
 
-  if (!hasToken(userId)) {
+  if (!(await hasToken(userId))) {
     return NextResponse.json({ connected: false, accounts: [] });
   }
 
-  const tok = getToken(userId);
+  const tok = await getToken(userId);
   if (!tok) return NextResponse.json({ connected: false, accounts: [] });
 
   try {

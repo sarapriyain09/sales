@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
 import {
   CRM_DAILY_ACTIVITIES,
   CRM_WEEKLY_ACTIVITIES,
@@ -33,9 +32,8 @@ export async function POST(req: NextRequest) {
     ? body.startDate
     : getMondayIsoDate(new Date());
 
-  const db = getDb();
   const userId = Number((session.user as { id?: string | number } | undefined)?.id ?? 0) || null;
-  const result = ensureWeeklyPlaybookTasks(db, {
+  const result = await ensureWeeklyPlaybookTasks({
     userId,
     now: new Date(`${requestedStartDate}T08:00:00`),
     force: body.force === true,

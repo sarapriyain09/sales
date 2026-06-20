@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
   try {
     const token = await exchangeCode(code);
     const userId = (session.user as any).id as number;
-    saveToken(userId, token);
+    await saveToken(userId, token);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'token_exchange_failed';
     return NextResponse.redirect(new URL(`/linkedin?error=${encodeURIComponent(msg)}`, req.url));

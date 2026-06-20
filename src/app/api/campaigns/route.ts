@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 import type { Campaign } from '@/lib/types';
 
 function parseServices(value: unknown): string[] {
@@ -19,7 +19,6 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
   const search = searchParams.get('search');
@@ -48,7 +47,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' GROUP BY c.id ORDER BY c.created_at DESC';
 
-  const campaigns = db.prepare(sql).all(...params) as Array<Record<string, unknown>>;
+  const campaigns = await queryAll(sql, params) as Array<Record<string, unknown>>;
   return NextResponse.json(
     campaigns.map((campaign) => ({
       ...campaign,
@@ -61,7 +60,6 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const body = await req.json() as Partial<Campaign>;
 
   if (!body.campaign_name?.trim()) {
@@ -72,12 +70,12 @@ export async function POST(req: NextRequest) {
     ? ((body as { services?: unknown }).services as unknown[]).filter((item): item is string => typeof item === 'string')
     : parseServices(body.services_json);
 
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO campaigns
       (campaign_name, target_industry, start_date, end_date, duration_days, focus_service, services_json, objective, status, updated_at)
     VALUES
       (@campaign_name, @target_industry, @start_date, @end_date, @duration_days, @focus_service, @services_json, @objective, @status, datetime('now'))
-  `).run({
+  `, {
     campaign_name: body.campaign_name.trim(),
     target_industry: body.target_industry ?? null,
     start_date: body.start_date ?? null,
@@ -87,9 +85,9 @@ export async function POST(req: NextRequest) {
     services_json: JSON.stringify(services),
     objective: body.objective ?? null,
     status: body.status ?? 'draft',
-  });
+  } as unknown as Record<string, string | number | boolean | null>);
 
-  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(result.lastInsertRowid) as Record<string, unknown> | undefined;
+  const campaign = await queryOne('SELECT * FROM campaigns WHERE id = ?', [Number(result.lastInsertId)]) as Record<string, unknown> | undefined;
   if (!campaign) return NextResponse.json({ error: 'Campaign creation failed' }, { status: 500 });
   return NextResponse.json({ ...campaign, services: parseServices(campaign.services_json) }, { status: 201 });
 }

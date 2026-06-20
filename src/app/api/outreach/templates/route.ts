@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement, withTransaction } from '@/lib/db-client';
 import {
   OUTREACH_VERTICALS,
   type OutreachChannel,
@@ -38,12 +38,12 @@ function parseEmailOutput(text: string) {
   return { subject, message };
 }
 
-function getTemplate(db: ReturnType<typeof getDb>, channel: OutreachChannel, vertical: string) {
-  return db.prepare(`
+async function getTemplate(channel: OutreachChannel, vertical: string) {
+  return queryOne<{ channel: OutreachChannel; vertical: string; subject: string | null; message: string }>(`
     SELECT channel, vertical, subject, message
     FROM outreach_templates
     WHERE channel = ? AND vertical = ?
-  `).get(channel, vertical) as { channel: OutreachChannel; vertical: string; subject: string | null; message: string } | undefined;
+  `, [channel, vertical]);
 }
 
 export async function GET(req: NextRequest) {
@@ -59,24 +59,22 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid channel.' }, { status: 400 });
   }
 
-  const db = getDb();
-
   if (!verticalRaw) {
     if (channelRaw === 'all') {
-      const templates = db.prepare(`
+      const templates = await queryAll(`
         SELECT channel, vertical, subject, message, updated_at
         FROM outreach_templates
         ORDER BY channel ASC, vertical ASC
-      `).all();
+      `);
       return NextResponse.json({ ok: true, templates });
     }
 
-    const templates = db.prepare(`
+    const templates = await queryAll(`
       SELECT channel, vertical, subject, message, updated_at
       FROM outreach_templates
       WHERE channel = ?
       ORDER BY vertical ASC
-    `).all(channelRaw);
+    `, [channelRaw]);
     return NextResponse.json({ ok: true, templates });
   }
 
@@ -85,7 +83,7 @@ export async function GET(req: NextRequest) {
   }
 
   const vertical = normalizeVertical(verticalRaw);
-  const template = getTemplate(db, channelRaw, vertical);
+  const template = await getTemplate(channelRaw, vertical);
   if (!template) return NextResponse.json({ error: 'Template not found.' }, { status: 404 });
 
   if (!leadIdRaw) {
@@ -97,11 +95,11 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid leadId.' }, { status: 400 });
   }
 
-  const lead = db.prepare(`
+  const lead = await queryOne<{ id: number; company_name: string; location: string | null; sic_label: string | null; notes: string | null }>(`
     SELECT id, company_name, location, sic_label, notes
     FROM leads
     WHERE id = ?
-  `).get(leadId) as { id: number; company_name: string; location: string | null; sic_label: string | null; notes: string | null } | undefined;
+  `, [leadId]);
 
   if (!lead) return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
 
@@ -125,7 +123,6 @@ export async function POST(req: NextRequest) {
   }
 
   const vertical = normalizeVertical(body.vertical);
-  const db = getDb();
 
   if (actionRaw === 'save_vertical') {
     if (!body.message?.trim()) {
@@ -135,12 +132,12 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'subject is required for email.' }, { status: 400 });
     }
 
-    db.prepare(`
+    await runStatement(`
       INSERT INTO outreach_templates (channel, vertical, subject, message, updated_at)
       VALUES (@channel, @vertical, @subject, @message, datetime('now'))
       ON CONFLICT(channel, vertical)
       DO UPDATE SET subject = excluded.subject, message = excluded.message, updated_at = datetime('now')
-    `).run({
+    `, {
       channel: channelRaw,
       vertical,
       subject: channelRaw === 'email' ? body.subject!.trim() : null,
@@ -158,16 +155,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'subject is required for email.' }, { status: 400 });
     }
 
-    const upsert = db.prepare(`
-      INSERT INTO outreach_templates (channel, vertical, subject, message, updated_at)
-      VALUES (@channel, @vertical, @subject, @message, datetime('now'))
-      ON CONFLICT(channel, vertical)
-      DO UPDATE SET subject = excluded.subject, message = excluded.message, updated_at = datetime('now')
-    `);
-
-    const tx = db.transaction(() => {
+    await withTransaction(async () => {
       for (const v of OUTREACH_VERTICALS) {
-        upsert.run({
+        await runStatement(`
+          INSERT INTO outreach_templates (channel, vertical, subject, message, updated_at)
+          VALUES (@channel, @vertical, @subject, @message, datetime('now'))
+          ON CONFLICT(channel, vertical)
+          DO UPDATE SET subject = excluded.subject, message = excluded.message, updated_at = datetime('now')
+        `, {
           channel: channelRaw,
           vertical: v,
           subject: channelRaw === 'email' ? body.subject!.trim() : null,
@@ -176,11 +171,10 @@ export async function POST(req: NextRequest) {
       }
     });
 
-    tx();
     return NextResponse.json({ ok: true, action: actionRaw, channel: channelRaw, updated: OUTREACH_VERTICALS.length });
   }
 
-  const stored = getTemplate(db, channelRaw, vertical);
+  const stored = await getTemplate(channelRaw, vertical);
   if (!stored) {
     return NextResponse.json({ error: 'Template not found.' }, { status: 404 });
   }

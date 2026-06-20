@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 import { checkTps, isTpsBlocked, tpsStatusLabel } from '@/lib/tps-checker';
 import twilio from 'twilio';
 
@@ -24,9 +24,8 @@ export async function POST(req: NextRequest) {
   }
 
   // Look up the session user's phone number from the DB
-  const db = getDb();
   const userId = (session.user as any)?.id;
-  const userRow = userId ? db.prepare('SELECT phone FROM users WHERE id = ?').get(userId) as { phone?: string } | undefined : undefined;
+  const userRow = userId ? await queryOne<{ phone?: string }>('SELECT phone FROM users WHERE id = ?', [userId]) : undefined;
   const callerPhone = userRow?.phone?.trim();
 
   if (!callerPhone) {
@@ -46,9 +45,10 @@ export async function POST(req: NextRequest) {
   // (TPS) or Corporate TPS (CTPS) before placing an outbound marketing call.
 
   // Use a cached result if checked within the last 30 days
-  const cachedLead = db.prepare(
-    `SELECT tps_status, tps_checked_at FROM leads WHERE id = ?`
-  ).get(body.leadId) as { tps_status: string | null; tps_checked_at: string | null } | undefined;
+  const cachedLead = await queryOne<{ tps_status: string | null; tps_checked_at: string | null }>(
+    `SELECT tps_status, tps_checked_at FROM leads WHERE id = ?`,
+    [body.leadId]
+  );
 
   let tpsStatus = cachedLead?.tps_status ?? null;
   const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
@@ -60,9 +60,10 @@ export async function POST(req: NextRequest) {
     // Only cache a real result — don't cache 'unchecked' so that adding
     // a TPS_API_KEY later will trigger a fresh check.
     if (result.checked) {
-      db.prepare(
-        `UPDATE leads SET tps_status = @tps_status, tps_checked_at = @checked_at WHERE id = @id`
-      ).run({ tps_status: result.status, checked_at: result.checkedAt, id: body.leadId });
+      await runStatement(
+        `UPDATE leads SET tps_status = @tps_status, tps_checked_at = @checked_at WHERE id = @id`,
+        { tps_status: result.status, checked_at: result.checkedAt, id: body.leadId }
+      );
     }
   }
 
@@ -98,21 +99,21 @@ export async function POST(req: NextRequest) {
     });
 
     // Log the call as a note on the lead
-    db.prepare(`
+    await runStatement(`
       INSERT INTO notes (lead_id, user_id, content, created_at)
       VALUES (@lead_id, @user_id, @body, datetime('now'))
-    `).run({
+    `, {
       lead_id: body.leadId,
       user_id: (session.user as any)?.id ?? null,
       body: `📞 Outbound call initiated to ${body.to}`,
     });
 
     // Mark as contacted
-    db.prepare(`
+    await runStatement(`
       UPDATE leads
       SET contacted_at = COALESCE(contacted_at, datetime('now')), updated_at = datetime('now')
       WHERE id = @id
-    `).run({ id: body.leadId });
+    `, { id: body.leadId });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

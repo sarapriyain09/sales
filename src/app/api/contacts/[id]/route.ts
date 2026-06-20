@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -18,11 +18,10 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   }
 
   const setClause = fields.map((field) => `${field} = @${field}`).join(', ');
-  const db = getDb();
 
-  db.prepare(`UPDATE contacts SET ${setClause} WHERE id = @id`).run({ ...body, id });
+  await runStatement(`UPDATE contacts SET ${setClause} WHERE id = @id`, { ...body, id } as unknown as Record<string, string | number | boolean | null>);
 
-  const contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(id);
+  const contact = await queryOne('SELECT * FROM contacts WHERE id = ?', [id]);
   if (!contact) return NextResponse.json({ error: 'Not found' }, { status: 404 });
   return NextResponse.json(contact);
 }

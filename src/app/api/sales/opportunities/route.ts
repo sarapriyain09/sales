@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const owner = searchParams.get('owner');
   const stage = searchParams.get('stage');
@@ -72,7 +71,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' ORDER BY s.sort_order ASC, o.updated_at DESC';
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = await queryAll(sql, params);
   return NextResponse.json(rows);
 }
 
@@ -98,23 +97,22 @@ export async function POST(req: NextRequest) {
   const opportunityName = (body.opportunity_name ?? '').trim();
   if (!opportunityName) return NextResponse.json({ error: 'opportunity_name is required' }, { status: 400 });
 
-  const db = getDb();
   let pipelineId = body.pipeline_id ?? null;
   if (!pipelineId) {
-    const defaultPipeline = db.prepare('SELECT id FROM pipelines ORDER BY sort_order ASC, id ASC LIMIT 1').get() as { id: number } | undefined;
+    const defaultPipeline = await queryOne('SELECT id FROM pipelines ORDER BY sort_order ASC, id ASC LIMIT 1') as { id: number } | undefined;
     pipelineId = defaultPipeline?.id ?? null;
   }
 
   let stageId = body.stage_id ?? null;
   if (!stageId && pipelineId) {
-    const defaultStage = db.prepare('SELECT id, default_probability FROM pipeline_stages WHERE pipeline_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1').get(pipelineId) as { id: number; default_probability: number } | undefined;
+    const defaultStage = await queryOne('SELECT id, default_probability FROM pipeline_stages WHERE pipeline_id = ? ORDER BY sort_order ASC, id ASC LIMIT 1', [pipelineId]) as { id: number; default_probability: number } | undefined;
     stageId = defaultStage?.id ?? null;
     if (!body.probability && defaultStage) {
       body.probability = defaultStage.default_probability;
     }
   }
 
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO opportunities (
       opportunity_name, company_id, contact_id, lead_id, pipeline_id, stage_id,
       estimated_value, probability, expected_close_date, assigned_user, status, notes, won_at, updated_at
@@ -122,7 +120,7 @@ export async function POST(req: NextRequest) {
       @opportunity_name, @company_id, @contact_id, @lead_id, @pipeline_id, @stage_id,
       @estimated_value, @probability, @expected_close_date, @assigned_user, @status, @notes, @won_at, datetime('now')
     )
-  `).run({
+  `, {
     opportunity_name: opportunityName,
     company_id: body.company_id ?? null,
     contact_id: body.contact_id ?? null,
@@ -138,6 +136,6 @@ export async function POST(req: NextRequest) {
     won_at: (body.status ?? 'open').toLowerCase() === 'won' ? new Date().toISOString() : null,
   });
 
-  const created = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(result.lastInsertRowid);
+  const created = await queryOne('SELECT * FROM opportunities WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(created, { status: 201 });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 import { searchExistingCompanies } from '@/lib/companies-house';
 import { scoreLead } from '@/lib/lead-scorer';
 import { getSicDescription } from '@/lib/sic-codes';
@@ -62,11 +62,11 @@ function makeLinkedinSearchUrl(companyName: string): string {
   return `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${companyName} founder OR director OR head of engineering`)}`;
 }
 
-function ensureTask(db: ReturnType<typeof getDb>, leadId: number, title: string, dueDate: string): boolean {
-  const existing = db.prepare('SELECT id FROM tasks WHERE lead_id = ? AND title = ?').get(leadId, title) as { id: number } | undefined;
+async function ensureTask(leadId: number, title: string, dueDate: string): Promise<boolean> {
+  const existing = await queryOne('SELECT id FROM tasks WHERE lead_id = ? AND title = ?', [leadId, title]) as { id: number } | undefined;
   if (existing) return false;
 
-  db.prepare('INSERT INTO tasks (lead_id, title, due_date) VALUES (?, ?, ?)').run(leadId, title, dueDate);
+  await runStatement('INSERT INTO tasks (lead_id, title, due_date) VALUES (?, ?, ?)', [leadId, title, dueDate]);
   return true;
 }
 
@@ -86,17 +86,15 @@ export async function POST(req: NextRequest) {
   const locations = body.locations && body.locations.length > 0 ? body.locations : DEFAULT_LOCATIONS;
   const campaignName = (body.campaignName ?? 'UK Automation + Engineering LinkedIn Campaign').trim();
 
-  const db = getDb();
-
-  const existingCampaign = db.prepare(`
+  const existingCampaign = await queryOne(`
     SELECT id
     FROM campaigns
     WHERE campaign_name = ?
     ORDER BY id DESC
     LIMIT 1
-  `).get(campaignName) as { id: number } | undefined;
+  `, [campaignName]) as { id: number } | undefined;
 
-  const campaignId = existingCampaign?.id ?? Number(db.prepare(`
+  const campaignId = existingCampaign?.id ?? Number((await runStatement(`
     INSERT INTO campaigns (
       campaign_name,
       target_industry,
@@ -110,34 +108,34 @@ export async function POST(req: NextRequest) {
       created_at,
       updated_at
     ) VALUES (?, ?, date('now'), date('now', '+90 day'), 90, ?, ?, ?, 'active', datetime('now'), datetime('now'))
-  `).run(
+  `, [
     campaignName,
     'Automation, Engineering',
     'CRM + AI Automation Services',
     JSON.stringify(['crm', 'ai_automation', 'engineering']),
     'Acquire and nurture 150 UK prospects via LinkedIn campaign flow',
-  ).lastInsertRowid);
+  ])).lastInsertId);
 
   // Ensure baseline campaign content exists once.
-  const hasContent = db.prepare('SELECT id FROM content_posts WHERE campaign_id = ? LIMIT 1').get(campaignId) as { id: number } | undefined;
+  const hasContent = await queryOne('SELECT id FROM content_posts WHERE campaign_id = ? LIMIT 1', [campaignId]) as { id: number } | undefined;
   if (!hasContent) {
-    db.prepare(`
+    await runStatement(`
       INSERT INTO content_posts (title, post_content, platform, content_type, status, campaign_id, created_at, updated_at)
       VALUES (?, ?, 'linkedin', 'connection_request', 'draft', ?, datetime('now'), datetime('now'))
-    `).run(
+    `, [
       'LinkedIn Connection Request Template',
       'Hi {{first_name}}, I work with UK automation and engineering firms to improve lead handling and follow-up using CRM + AI workflows. Open to connect?',
       campaignId,
-    );
+    ]);
 
-    db.prepare(`
+    await runStatement(`
       INSERT INTO content_posts (title, post_content, platform, content_type, status, campaign_id, created_at, updated_at)
       VALUES (?, ?, 'linkedin', 'follow_up', 'draft', ?, datetime('now'), datetime('now'))
-    `).run(
+    `, [
       'LinkedIn Follow-up Template',
       'Thanks for connecting {{first_name}}. If useful, I can share a quick 3-step playbook we use to reduce missed follow-ups and increase booked meetings for engineering/automation teams.',
       campaignId,
-    );
+    ]);
   }
 
   const collected = new Map<string, {
@@ -181,7 +179,7 @@ export async function POST(req: NextRequest) {
   let tasksCreated = 0;
 
   for (const company of collected.values()) {
-    const existingLead = db.prepare('SELECT id FROM leads WHERE company_number = ?').get(company.company_number) as { id: number } | undefined;
+    const existingLead = await queryOne('SELECT id FROM leads WHERE company_number = ?', [company.company_number]) as { id: number } | undefined;
 
     let leadId: number;
     if (existingLead) {
@@ -202,7 +200,7 @@ export async function POST(req: NextRequest) {
         },
       }, 'unknown').total;
 
-      const insertedLead = db.prepare(`
+      const insertedLead = await runStatement(`
         INSERT INTO leads (
           company_name,
           company_number,
@@ -220,7 +218,7 @@ export async function POST(req: NextRequest) {
           linkedin_url,
           created_at
         ) VALUES (?, ?, ?, ?, 'companies_house', ?, 'new', 'lead', ?, ?, ?, ?, 'engineering', ?, datetime('now'))
-      `).run(
+      `, [
         company.company_name,
         company.company_number,
         primarySic,
@@ -231,35 +229,35 @@ export async function POST(req: NextRequest) {
         company.date_of_creation,
         'Auto-added for LinkedIn outreach campaign (automation + engineering UK target list).',
         makeLinkedinSearchUrl(company.company_name),
-      );
+      ]);
 
-      leadId = Number(insertedLead.lastInsertRowid);
+      leadId = Number(insertedLead.lastInsertId);
       leadsCreated += 1;
     }
 
     // Build a consistent outreach workflow in CRM; LinkedIn send itself stays manual.
-    if (ensureTask(db, leadId, '[LinkedIn Campaign] Find decision maker profile and personalize note', isoDatePlusDays(0))) {
+    if (await ensureTask(leadId, '[LinkedIn Campaign] Find decision maker profile and personalize note', isoDatePlusDays(0))) {
       tasksCreated += 1;
     }
-    if (ensureTask(db, leadId, '[LinkedIn Campaign] Send connection request from personal profile', isoDatePlusDays(1))) {
+    if (await ensureTask(leadId, '[LinkedIn Campaign] Send connection request from personal profile', isoDatePlusDays(1))) {
       tasksCreated += 1;
     }
-    if (ensureTask(db, leadId, '[LinkedIn Campaign] Send campaign message after connect', isoDatePlusDays(3))) {
+    if (await ensureTask(leadId, '[LinkedIn Campaign] Send campaign message after connect', isoDatePlusDays(3))) {
       tasksCreated += 1;
     }
-    if (ensureTask(db, leadId, '[LinkedIn Campaign] Follow up if no reply', isoDatePlusDays(7))) {
+    if (await ensureTask(leadId, '[LinkedIn Campaign] Follow up if no reply', isoDatePlusDays(7))) {
       tasksCreated += 1;
     }
 
-    db.prepare(`
+    await runStatement(`
       INSERT INTO activities (lead_id, campaign_id, activity_type, date, notes, metadata_json, created_at)
       VALUES (?, ?, 'linkedin_campaign_queued', datetime('now'), ?, ?, datetime('now'))
-    `).run(
+    `, [
       leadId,
       campaignId,
       'Lead queued into LinkedIn campaign workflow.',
       JSON.stringify({ campaign: campaignName }),
-    );
+    ]);
   }
 
   return NextResponse.json({

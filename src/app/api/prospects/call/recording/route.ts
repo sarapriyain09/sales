@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { runStatement } from '@/lib/db-client';
 
 // Twilio POSTs here when a recording is ready.
 // We save the recording URL as a note on the lead.
@@ -14,17 +14,16 @@ export async function POST(req: NextRequest) {
   const duration      = form.get('RecordingDuration') as string | null;
 
   if (leadId && recordingUrl) {
-    const db = getDb();
     // Twilio recording URLs need .mp3 appended to download directly
     const mp3Url = `${recordingUrl}.mp3`;
     const mins = duration ? Math.floor(Number(duration) / 60) : 0;
     const secs = duration ? Number(duration) % 60 : 0;
     const durationStr = duration ? ` (${mins}:${secs.toString().padStart(2, '0')})` : '';
 
-    db.prepare(`
+    await runStatement(`
       INSERT INTO notes (lead_id, user_id, content, created_at)
       VALUES (@lead_id, NULL, @body, datetime('now'))
-    `).run({
+    `, {
       lead_id: leadId,
       body: `🎙 Call recording${durationStr}: ${mp3Url}\nSID: ${recordingSid ?? 'unknown'}`,
     });

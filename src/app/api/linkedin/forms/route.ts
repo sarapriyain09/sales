@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
   if (!accountId) return NextResponse.json({ error: 'accountId required' }, { status: 400 });
 
   const userId = (session.user as any).id as number;
-  const tok    = getToken(userId);
+  const tok    = await getToken(userId);
   if (!tok) return NextResponse.json({ error: 'Not connected to LinkedIn' }, { status: 403 });
 
   try {

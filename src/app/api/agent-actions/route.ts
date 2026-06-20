@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryAll } from '@/lib/db-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -26,24 +26,23 @@ export async function GET(req: NextRequest) {
   const status = (searchParams.get('status') ?? '').trim();
   const limit = Math.min(Number(searchParams.get('limit') ?? '50') || 50, 200);
 
-  const db = getDb();
   if (status) {
-    const rows = db.prepare(`
+    const rows = await queryAll(`
       SELECT id, event_id, lead_id, call_id, summary, action_type, action_title, payload_json, status, source, created_at, reviewed_at, executed_at
       FROM agent_actions
       WHERE status = @status
       ORDER BY datetime(created_at) DESC
       LIMIT @limit
-    `).all({ status, limit });
+    `, { status, limit });
     return NextResponse.json(rows);
   }
 
-  const rows = db.prepare(`
+  const rows = await queryAll(`
     SELECT id, event_id, lead_id, call_id, summary, action_type, action_title, payload_json, status, source, created_at, reviewed_at, executed_at
     FROM agent_actions
     ORDER BY datetime(created_at) DESC
     LIMIT @limit
-  `).all({ limit });
+  `, { limit });
 
   return NextResponse.json(rows);
 }

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import crypto from 'crypto';
 import nodemailer from 'nodemailer';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 import { isDemoMode } from '@/lib/app-mode';
 
 const transporter = nodemailer.createTransport({
@@ -38,15 +38,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Name, email and password (min 8 chars) are required.' }, { status: 400 });
   }
 
-  const db = getDb();
-  const existing = db.prepare('SELECT id, demo_verified FROM users WHERE email = ?').get(email) as { id: number; demo_verified: number } | undefined;
+  const existing = await queryOne('SELECT id, demo_verified FROM users WHERE email = ?', [email]) as { id: number; demo_verified: number } | undefined;
   const token = crypto.randomBytes(24).toString('hex');
   const expiry = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
   let createdUser = 0;
   if (!existing) {
     const hash = await bcrypt.hash(password, 12);
-    db.prepare('INSERT INTO users (name, email, password, role, demo_verified, demo_verify_token, demo_verify_expires) VALUES (?, ?, ?, ?, ?, ?, ?)').run(
+    await runStatement('INSERT INTO users (name, email, password, role, demo_verified, demo_verify_token, demo_verify_expires) VALUES (?, ?, ?, ?, ?, ?, ?)', [
       name,
       email,
       hash,
@@ -54,7 +53,7 @@ export async function POST(req: NextRequest) {
       0,
       token,
       expiry,
-    );
+    ]);
     createdUser = 1;
   } else if (existing.demo_verified === 1) {
     return NextResponse.json(
@@ -66,7 +65,7 @@ export async function POST(req: NextRequest) {
       { status: 409 }
     );
   } else if (existing.demo_verified !== 1) {
-    db.prepare('UPDATE users SET demo_verify_token = ?, demo_verify_expires = ? WHERE id = ?').run(token, expiry, existing.id);
+    await runStatement('UPDATE users SET demo_verify_token = ?, demo_verify_expires = ? WHERE id = ?', [token, expiry, existing.id]);
   }
 
   const host = req.headers.get('host');
@@ -102,10 +101,11 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  db.prepare(
+  await runStatement(
     `INSERT INTO demo_registrations (name, email, company, phone, verification_sent, source_host, ip_address, user_agent, created_user)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
-  ).run(name, email, company, phone, verificationSent, host, ip, userAgent, createdUser);
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [name, email, company, phone, verificationSent, host, ip, userAgent, createdUser]
+  );
 
   return NextResponse.json({ ok: true, createdUser: createdUser === 1, verificationSent: verificationSent === 1 });
 }

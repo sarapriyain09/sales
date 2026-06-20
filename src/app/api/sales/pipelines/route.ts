@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 
 export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
-  const pipelines = db.prepare(`
+  const pipelines = await queryAll(`
     SELECT p.*,
       (
         SELECT COUNT(*)
@@ -17,7 +16,7 @@ export async function GET() {
       ) AS stage_count
     FROM pipelines p
     ORDER BY p.sort_order ASC, p.created_at ASC
-  `).all();
+  `);
 
   return NextResponse.json(pipelines);
 }
@@ -30,16 +29,15 @@ export async function POST(req: NextRequest) {
   const name = (body.name ?? '').trim();
   if (!name) return NextResponse.json({ error: 'Pipeline name is required' }, { status: 400 });
 
-  const db = getDb();
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO pipelines (name, description, sort_order, updated_at)
     VALUES (@name, @description, @sort_order, datetime('now'))
-  `).run({
+  `, {
     name,
     description: body.description?.trim() || null,
     sort_order: Number.isFinite(body.sort_order) ? Number(body.sort_order) : 999,
   });
 
-  const pipeline = db.prepare('SELECT * FROM pipelines WHERE id = ?').get(result.lastInsertRowid);
+  const pipeline = await queryOne('SELECT * FROM pipelines WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(pipeline, { status: 201 });
 }

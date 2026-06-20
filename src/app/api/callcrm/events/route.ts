@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,15 +57,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400 });
   }
 
-  const db = getDb();
-
   const leadIdCandidate =
     toNumberOrNull(body.leadId) ??
     toNumberOrNull((body.call as Record<string, unknown> | undefined)?.leadId) ??
     toNumberOrNull((body.context as Record<string, unknown> | undefined)?.leadId);
 
   const leadExists = leadIdCandidate
-    ? db.prepare('SELECT 1 AS ok FROM leads WHERE id = ?').get(leadIdCandidate)
+    ? await queryOne('SELECT 1 AS ok FROM leads WHERE id = ?', [leadIdCandidate])
     : null;
   const leadId = leadExists ? leadIdCandidate : null;
 
@@ -90,10 +88,10 @@ export async function POST(req: NextRequest) {
   );
 
   if (summary && leadId) {
-    db.prepare(`
+    await runStatement(`
       INSERT INTO notes (lead_id, user_id, content, created_at)
       VALUES (@lead_id, NULL, @body, datetime('now'))
-    `).run({
+    `, {
       lead_id: leadId,
       body: `🤖 AI call summary:\n${summary}`,
     });
@@ -102,18 +100,18 @@ export async function POST(req: NextRequest) {
   const approvalMode = (process.env.AGENT_APPROVAL_MODE ?? 'review').toLowerCase();
   const status = approvalMode === 'auto' ? 'approved' : 'pending_review';
 
-  const insertAction = db.prepare(`
+  const insertActionSql = `
     INSERT INTO agent_actions (
       event_id, lead_id, call_id, summary, action_type, action_title, payload_json, status, source, created_at
     ) VALUES (
       @event_id, @lead_id, @call_id, @summary, @action_type, @action_title, @payload_json, @status, 'callcrm', datetime('now')
     )
-  `);
+  `;
 
   let inserted = 0;
   for (const action of actions) {
     if (typeof action === 'string') {
-      insertAction.run({
+      await runStatement(insertActionSql, {
         event_id: eventId,
         lead_id: leadId,
         call_id: callId,
@@ -122,7 +120,7 @@ export async function POST(req: NextRequest) {
         action_title: action.slice(0, 240),
         payload_json: JSON.stringify({ raw: action }),
         status,
-      });
+      } as unknown as Record<string, string | number | boolean | null>);
       inserted += 1;
       continue;
     }
@@ -137,7 +135,7 @@ export async function POST(req: NextRequest) {
       toStringOrNull(action.description) ??
       JSON.stringify(action).slice(0, 240);
 
-    insertAction.run({
+    await runStatement(insertActionSql, {
       event_id: eventId,
       lead_id: leadId,
       call_id: callId,
@@ -146,7 +144,7 @@ export async function POST(req: NextRequest) {
       action_title: actionTitle,
       payload_json: JSON.stringify(action),
       status,
-    });
+    } as unknown as Record<string, string | number | boolean | null>);
     inserted += 1;
   }
 

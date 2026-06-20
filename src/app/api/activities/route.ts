@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 import type { Activity } from '@/lib/types';
 
 const LINKEDIN_STATUS_BY_ACTIVITY: Record<string, string> = {
@@ -16,7 +16,6 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const contactId = searchParams.get('contact_id');
   const campaignId = searchParams.get('campaign_id');
@@ -47,7 +46,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' ORDER BY a.date DESC, a.created_at DESC';
 
-  const activities = db.prepare(sql).all(...params);
+  const activities = await queryAll(sql, params);
   return NextResponse.json(activities);
 }
 
@@ -55,19 +54,18 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const body = await req.json() as Partial<Activity> & { metadata?: unknown };
 
   if (!body.activity_type?.trim()) {
     return NextResponse.json({ error: 'activity_type is required' }, { status: 400 });
   }
 
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO activities
       (contact_id, lead_id, campaign_id, activity_type, date, notes, metadata_json)
     VALUES
       (@contact_id, @lead_id, @campaign_id, @activity_type, @date, @notes, @metadata_json)
-  `).run({
+  `, {
     contact_id: body.contact_id ?? null,
     lead_id: body.lead_id ?? null,
     campaign_id: body.campaign_id ?? null,
@@ -75,13 +73,13 @@ export async function POST(req: NextRequest) {
     date: body.date ?? new Date().toISOString(),
     notes: body.notes ?? null,
     metadata_json: body.metadata ? JSON.stringify(body.metadata) : body.metadata_json ?? null,
-  });
+  } as unknown as Record<string, string | number | boolean | null>);
 
   const mappedStatus = LINKEDIN_STATUS_BY_ACTIVITY[body.activity_type.trim()];
   if (mappedStatus && body.contact_id) {
-    db.prepare('UPDATE contacts SET status = ? WHERE id = ?').run(mappedStatus, body.contact_id);
+    await runStatement('UPDATE contacts SET status = ? WHERE id = ?', [mappedStatus, body.contact_id]);
   }
 
-  const activity = db.prepare('SELECT * FROM activities WHERE id = ?').get(result.lastInsertRowid);
+  const activity = await queryOne('SELECT * FROM activities WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(activity, { status: 201 });
 }

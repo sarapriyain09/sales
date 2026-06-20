@@ -1,4 +1,4 @@
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 
 // ── Environment ──────────────────────────────────────────────────────────────
 export const LI_CLIENT_ID     = process.env.LINKEDIN_CLIENT_ID     ?? '';
@@ -42,34 +42,29 @@ export async function exchangeCode(code: string): Promise<{
 }
 
 // ── Token storage ────────────────────────────────────────────────────────────
-export function saveToken(userId: number, token: { access_token: string; expires_in: number; scope: string }) {
-  const db = getDb();
+export async function saveToken(userId: number, token: { access_token: string; expires_in: number; scope: string }) {
   const expiresAt = new Date(Date.now() + token.expires_in * 1000).toISOString();
   // one token per user — replace
-  db.prepare('DELETE FROM linkedin_tokens WHERE user_id = ?').run(userId);
-  db.prepare(`
+  await runStatement('DELETE FROM linkedin_tokens WHERE user_id = ?', [userId]);
+  await runStatement(`
     INSERT INTO linkedin_tokens (user_id, access_token, expires_at, scope)
     VALUES (?, ?, ?, ?)
-  `).run(userId, token.access_token, expiresAt, token.scope);
+  `, [userId, token.access_token, expiresAt, token.scope]);
 }
 
-export function getToken(userId: number): { access_token: string; expires_at: string } | null {
-  const db = getDb();
-  const row = db.prepare('SELECT access_token, expires_at FROM linkedin_tokens WHERE user_id = ?').get(userId) as
-    { access_token: string; expires_at: string } | undefined;
+export async function getToken(userId: number): Promise<{ access_token: string; expires_at: string } | null> {
+  const row = await queryOne<{ access_token: string; expires_at: string }>('SELECT access_token, expires_at FROM linkedin_tokens WHERE user_id = ?', [userId]);
   if (!row) return null;
   if (new Date(row.expires_at) < new Date()) return null; // expired
   return row;
 }
 
-export function deleteToken(userId: number) {
-  getDb().prepare('DELETE FROM linkedin_tokens WHERE user_id = ?').run(userId);
+export async function deleteToken(userId: number) {
+  await runStatement('DELETE FROM linkedin_tokens WHERE user_id = ?', [userId]);
 }
 
-export function hasToken(userId: number): boolean {
-  const db = getDb();
-  const row = db.prepare('SELECT expires_at FROM linkedin_tokens WHERE user_id = ?').get(userId) as
-    { expires_at: string } | undefined;
+export async function hasToken(userId: number): Promise<boolean> {
+  const row = await queryOne<{ expires_at: string }>('SELECT expires_at FROM linkedin_tokens WHERE user_id = ?', [userId]);
   if (!row) return false;
   return new Date(row.expires_at) > new Date();
 }
@@ -199,14 +194,14 @@ export async function listFormResponses(
 }
 
 // ── Already-imported tracking ─────────────────────────────────────────────────
-export function getImportedIds(): Set<string> {
-  const db   = getDb();
-  const rows = db.prepare('SELECT form_response_id FROM linkedin_imported').all() as { form_response_id: string }[];
+export async function getImportedIds(): Promise<Set<string>> {
+  const rows = await queryAll('SELECT form_response_id FROM linkedin_imported') as { form_response_id: string }[];
   return new Set(rows.map(r => r.form_response_id));
 }
 
-export function markImported(formResponseId: string, leadId: number) {
-  getDb().prepare(
+export async function markImported(formResponseId: string, leadId: number) {
+  await runStatement(
     'INSERT OR IGNORE INTO linkedin_imported (form_response_id, lead_id) VALUES (?, ?)',
-  ).run(formResponseId, leadId);
+    [formResponseId, leadId],
+  );
 }

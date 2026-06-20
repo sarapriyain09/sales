@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import nodemailer from 'nodemailer';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 
 interface BriefMailBody {
   force?: boolean;
@@ -34,43 +34,43 @@ function toRecipientList(input?: string | string[]): string[] {
   return smtpUser ? [smtpUser] : [];
 }
 
-function buildMorningBrief(db: ReturnType<typeof getDb>) {
-  const newLeadsToday = (db.prepare(`
+async function buildMorningBrief() {
+  const newLeadsToday = ((await queryOne(`
     SELECT COUNT(*) as c
     FROM leads
     WHERE date(created_at) = date('now')
-  `).get() as { c: number }).c;
+  `)) as { c: number }).c;
 
-  const contactedToday = (db.prepare(`
+  const contactedToday = ((await queryOne(`
     SELECT COUNT(*) as c
     FROM activities
     WHERE activity_type IN ('connection_sent', 'message_sent', 'email_sent', 'sms_sent')
       AND date(date) = date('now')
-  `).get() as { c: number }).c;
+  `)) as { c: number }).c;
 
-  const repliedToday = (db.prepare(`
+  const repliedToday = ((await queryOne(`
     SELECT COUNT(*) as c
     FROM activities
     WHERE activity_type IN ('replied', 'email_reply', 'linkedin_reply')
       AND date(date) = date('now')
-  `).get() as { c: number }).c;
+  `)) as { c: number }).c;
 
-  const meetingsBookedToday = (db.prepare(`
+  const meetingsBookedToday = ((await queryOne(`
     SELECT COUNT(*) as c
     FROM activities
     WHERE activity_type = 'meeting_booked'
       AND date(date) = date('now')
-  `).get() as { c: number }).c;
+  `)) as { c: number }).c;
 
-  const followUpsDueToday = (db.prepare(`
+  const followUpsDueToday = ((await queryOne(`
     SELECT COUNT(*) as c
     FROM tasks
     WHERE done = 0
       AND due_date IS NOT NULL
       AND date(due_date) <= date('now')
-  `).get() as { c: number }).c;
+  `)) as { c: number }).c;
 
-  const priorityFollowUps = db.prepare(`
+  const priorityFollowUps = await queryAll(`
     SELECT t.title, t.due_date, l.company_name
     FROM tasks t
     LEFT JOIN leads l ON l.id = t.lead_id
@@ -79,7 +79,7 @@ function buildMorningBrief(db: ReturnType<typeof getDb>) {
       AND date(t.due_date) <= date('now')
     ORDER BY l.lead_score DESC, date(t.due_date) ASC
     LIMIT 8
-  `).all() as Array<{ title: string; due_date: string | null; company_name: string | null }>;
+  `) as Array<{ title: string; due_date: string | null; company_name: string | null }>;
 
   return {
     summary: { newLeadsToday, contactedToday, repliedToday, meetingsBookedToday, followUpsDueToday },
@@ -113,13 +113,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No recipients configured. Set MORNING_BRIEF_TO or SMTP_USER.' }, { status: 400 });
   }
 
-  const db = getDb();
-  const alreadySent = db.prepare('SELECT id FROM morning_brief_mail_runs WHERE brief_date = ?').get(briefDate) as { id: number } | undefined;
+  const alreadySent = await queryOne('SELECT id FROM morning_brief_mail_runs WHERE brief_date = ?', [briefDate]) as { id: number } | undefined;
   if (alreadySent && !force) {
     return NextResponse.json({ ok: true, skipped: true, reason: 'already_sent', briefDate, recipients });
   }
 
-  const brief = buildMorningBrief(db);
+  const brief = await buildMorningBrief();
 
   const fromName = process.env.SMTP_FROM_NAME ?? 'Splendid Technology';
   const fromEmail = process.env.SMTP_USER;
@@ -176,9 +175,9 @@ export async function POST(req: NextRequest) {
   });
 
   if (alreadySent && force) {
-    db.prepare('DELETE FROM morning_brief_mail_runs WHERE id = ?').run(alreadySent.id);
+    await runStatement('DELETE FROM morning_brief_mail_runs WHERE id = ?', [alreadySent.id]);
   }
-  db.prepare('INSERT INTO morning_brief_mail_runs (brief_date, sent_to, created_at) VALUES (?, ?, datetime(\'now\'))').run(briefDate, recipients.join(','));
+  await runStatement('INSERT INTO morning_brief_mail_runs (brief_date, sent_to, created_at) VALUES (?, ?, datetime(\'now\'))', [briefDate, recipients.join(',')]);
 
   return NextResponse.json({
     ok: true,

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne } from '@/lib/db-client';
 import { generateChatCompletion } from '@/lib/openai';
 
 type BdTask = 'email_sequence' | 'linkedin_post' | 'proposal_draft';
@@ -17,50 +17,50 @@ function isTask(value: string): value is BdTask {
   return value === 'email_sequence' || value === 'linkedin_post' || value === 'proposal_draft';
 }
 
-function buildLeadContext(db: ReturnType<typeof getDb>, leadId?: number) {
+async function buildLeadContext(leadId?: number) {
   if (!leadId) return null;
 
-  const lead = db.prepare(`
+  const lead = await queryOne(`
     SELECT l.*, c.name as linked_company_name, c.industry as company_industry
     FROM leads l
     LEFT JOIN companies c ON c.id = l.company_id
     WHERE l.id = ?
-  `).get(leadId) as Record<string, unknown> | undefined;
+  `, [leadId]) as Record<string, unknown> | undefined;
 
   if (!lead) return null;
 
-  const contacts = db.prepare(`
+  const contacts = await queryAll(`
     SELECT id, name, job_title, email, linkedin_url, status, lead_score
     FROM contacts
     WHERE lead_id = ?
     ORDER BY lead_score DESC, is_primary DESC
     LIMIT 5
-  `).all(leadId);
+  `, [leadId]);
 
-  const activity = db.prepare(`
+  const activity = await queryAll(`
     SELECT activity_type, date, notes
     FROM activities
     WHERE lead_id = ?
     ORDER BY date DESC
     LIMIT 10
-  `).all(leadId);
+  `, [leadId]);
 
   return { lead, contacts, activity };
 }
 
-function buildCampaignContext(db: ReturnType<typeof getDb>, campaignId?: number) {
+async function buildCampaignContext(campaignId?: number) {
   if (!campaignId) return null;
 
-  const campaign = db.prepare('SELECT * FROM campaigns WHERE id = ?').get(campaignId);
+  const campaign = await queryOne('SELECT * FROM campaigns WHERE id = ?', [campaignId]);
   if (!campaign) return null;
 
-  const campaignContacts = db.prepare(`
+  const campaignContacts = await queryAll(`
     SELECT id, name, company, job_title, industry, country, status, lead_score
     FROM contacts
     WHERE campaign_id = ?
     ORDER BY lead_score DESC
     LIMIT 20
-  `).all(campaignId);
+  `, [campaignId]);
 
   return { campaign, campaignContacts };
 }
@@ -122,9 +122,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid task' }, { status: 400 });
   }
 
-  const db = getDb();
-  const leadContext = buildLeadContext(db, body.leadId);
-  const campaignContext = buildCampaignContext(db, body.campaignId);
+  const leadContext = await buildLeadContext(body.leadId);
+  const campaignContext = await buildCampaignContext(body.campaignId);
 
   if (body.leadId && !leadContext) {
     return NextResponse.json({ error: 'Lead not found' }, { status: 404 });

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 import { seedUsers } from '@/lib/auth-utils';
 import type { Lead, LeadStage, LeadStatus, LeadSource } from '@/lib/types';
 
@@ -12,7 +12,6 @@ export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const stage  = searchParams.get('stage');
   const status = searchParams.get('status');
@@ -33,7 +32,7 @@ export async function GET(req: NextRequest) {
   if (search) { sql += ' AND (l.company_name LIKE ? OR l.location LIKE ? OR l.email LIKE ?)'; const q = `%${search}%`; params.push(q, q, q); }
 
   sql += ' ORDER BY l.lead_score DESC, l.created_at DESC';
-  const leads = db.prepare(sql).all(...params);
+  const leads = await queryAll(sql, params);
   return NextResponse.json(leads);
 }
 
@@ -41,16 +40,15 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const body = await req.json() as Partial<Lead>;
 
   // Deduplicate by company_number if provided
   if (body.company_number) {
-    const existing = db.prepare('SELECT id FROM leads WHERE company_number = ?').get(body.company_number);
+    const existing = await queryOne('SELECT id FROM leads WHERE company_number = ?', [body.company_number]);
     if (existing) return NextResponse.json({ error: 'Already exists', lead: existing }, { status: 409 });
   }
 
-  const stmt = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO leads
       (lead_name, contact_person, industry,
        company_name, company_number, sic_code, sic_label, website, phone, email,
@@ -69,9 +67,7 @@ export async function POST(req: NextRequest) {
        @contact_name, @linkedin_url,
        @eng_score, @eng_grade, @eng_sector, @employee_count,
        @linkedin_hiring, @decision_maker_role, @growth_signal, @linkedin_engagement)
-  `);
-
-  const result = stmt.run({
+  `, {
     lead_name:           body.lead_name           ?? null,
     contact_person:      body.contact_person      ?? body.contact_name ?? null,
     industry:            body.industry            ?? body.sic_label ?? null,
@@ -107,8 +103,8 @@ export async function POST(req: NextRequest) {
     decision_maker_role: body.decision_maker_role ?? null,
     growth_signal:       body.growth_signal       ?? null,
     linkedin_engagement: body.linkedin_engagement ?? null,
-  });
+  } as unknown as Record<string, string | number | boolean | null>);
 
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(result.lastInsertRowid);
+  const lead = await queryOne('SELECT * FROM leads WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(lead, { status: 201 });
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 import { isDemoMode } from '@/lib/app-mode';
 
 function getDemoBaseUrl(req: NextRequest): string {
@@ -29,10 +29,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/login?activated=invalid', appBase));
   }
 
-  const db = getDb();
-  const user = db
-    .prepare('SELECT id, demo_verify_expires FROM users WHERE demo_verify_token = ? AND demo_verified = 0')
-    .get(token) as { id: number; demo_verify_expires: string | null } | undefined;
+  const user = await queryOne('SELECT id, demo_verify_expires FROM users WHERE demo_verify_token = ? AND demo_verified = 0', [token]) as { id: number; demo_verify_expires: string | null } | undefined;
 
   if (!user) {
     return NextResponse.redirect(new URL('/login?activated=invalid', appBase));
@@ -42,6 +39,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/login?activated=expired', appBase));
   }
 
-  db.prepare('UPDATE users SET demo_verified = 1, demo_verify_token = NULL, demo_verify_expires = NULL WHERE id = ?').run(user.id);
+  await runStatement('UPDATE users SET demo_verified = 1, demo_verify_token = NULL, demo_verify_expires = NULL WHERE id = ?', [user.id]);
   return NextResponse.redirect(new URL('/login?activated=1', appBase));
 }

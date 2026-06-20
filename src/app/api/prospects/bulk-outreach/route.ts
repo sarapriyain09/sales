@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, runStatement } from '@/lib/db-client';
 import { normalizeVertical, renderOutreachTemplate, type OutreachChannel } from '@/lib/outreach-templates';
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
@@ -49,7 +49,6 @@ export async function POST(req: NextRequest) {
   const channel = channelRaw as Channel;
   const scope = scopeRaw as Scope;
   const verticalFilter = body.vertical ? normalizeVertical(body.vertical) : null;
-  const db = getDb();
 
   if (channel === 'email' && (!process.env.SMTP_USER || !process.env.SMTP_PASS)) {
     return NextResponse.json({ error: 'Email is not configured.' }, { status: 503 });
@@ -77,34 +76,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'leadIds are required for selected scope.' }, { status: 400 });
     }
     const placeholders = ids.map(() => '?').join(',');
-    leads = db.prepare(`
+    leads = await queryAll(`
       SELECT id, company_name, email, phone, notes, source, vertical, outreach_email, sms_sent_at, tps_status
       FROM leads
       WHERE stage = 'prospect' AND id IN (${placeholders})
       ORDER BY id ASC
-    `).all(...ids) as typeof leads;
+    `, ids) as typeof leads;
   } else if (scope === 'all') {
-    leads = db.prepare(`
+    leads = await queryAll(`
       SELECT id, company_name, email, phone, notes, source, vertical, outreach_email, sms_sent_at, tps_status
       FROM leads
       WHERE stage = 'prospect'
       ORDER BY id ASC
-    `).all() as typeof leads;
+    `) as typeof leads;
   } else {
     if (channel === 'email') {
-      leads = db.prepare(`
+      leads = await queryAll(`
         SELECT id, company_name, email, phone, notes, source, vertical, outreach_email, sms_sent_at, tps_status
         FROM leads
         WHERE stage = 'prospect' AND (outreach_email IS NULL OR outreach_email = '')
         ORDER BY id ASC
-      `).all() as typeof leads;
+      `) as typeof leads;
     } else {
-      leads = db.prepare(`
+      leads = await queryAll(`
         SELECT id, company_name, email, phone, notes, source, vertical, outreach_email, sms_sent_at, tps_status
         FROM leads
         WHERE stage = 'prospect' AND sms_sent_at IS NULL
         ORDER BY id ASC
-      `).all() as typeof leads;
+      `) as typeof leads;
     }
   }
 
@@ -112,11 +111,11 @@ export async function POST(req: NextRequest) {
     leads = leads.filter(l => normalizeVertical(l.vertical) === verticalFilter);
   }
 
-  const templateRows = db.prepare(`
+  const templateRows = await queryAll(`
     SELECT channel, vertical, subject, message
     FROM outreach_templates
     WHERE channel = ?
-  `).all(channel) as Array<{ channel: OutreachChannel; vertical: string; subject: string | null; message: string }>;
+  `, [channel]) as Array<{ channel: OutreachChannel; vertical: string; subject: string | null; message: string }>;
   const templateMap = new Map(templateRows.map(t => [t.vertical, t]));
 
   const failures: Array<{ id: number; company: string; error: string }> = [];
@@ -162,11 +161,11 @@ export async function POST(req: NextRequest) {
           html: emailDraft.message.replace(/\n/g, '<br>'),
         });
 
-        db.prepare(`
+        await runStatement(`
           UPDATE leads
           SET contacted_at = datetime('now'), outreach_email = @email, updated_at = datetime('now')
           WHERE id = @id
-        `).run({ id: lead.id, email: emailDraft.message });
+        `, { id: lead.id, email: emailDraft.message });
 
         sent += 1;
       } else {
@@ -195,11 +194,11 @@ export async function POST(req: NextRequest) {
           body: smsMessage,
         });
 
-        db.prepare(`
+        await runStatement(`
           UPDATE leads
           SET sms_sent_at = datetime('now'), sms_message = @msg, contacted_at = COALESCE(contacted_at, datetime('now')), updated_at = datetime('now')
           WHERE id = @id
-        `).run({ id: lead.id, msg: smsMessage });
+        `, { id: lead.id, msg: smsMessage });
 
         sent += 1;
       }

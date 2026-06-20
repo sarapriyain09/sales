@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 interface FacebookWebCampaignBody {
   campaignName?: string;
@@ -74,11 +74,11 @@ function buildPost(dayIndex: number): { title: string; content: string } {
   return { title, content };
 }
 
-function ensureTask(db: ReturnType<typeof getDb>, title: string, dueDate: string): boolean {
-  const existing = db.prepare('SELECT id FROM tasks WHERE lead_id IS NULL AND title = ? AND due_date = ?').get(title, dueDate) as { id: number } | undefined;
+async function ensureTask(title: string, dueDate: string): Promise<boolean> {
+  const existing = await queryOne('SELECT id FROM tasks WHERE lead_id IS NULL AND title = ? AND due_date = ?', [title, dueDate]) as { id: number } | undefined;
   if (existing) return false;
 
-  db.prepare('INSERT INTO tasks (lead_id, title, due_date) VALUES (NULL, ?, ?)').run(title, dueDate);
+  await runStatement('INSERT INTO tasks (lead_id, title, due_date) VALUES (NULL, ?, ?)', [title, dueDate]);
   return true;
 }
 
@@ -98,17 +98,15 @@ export async function POST(req: NextRequest) {
   const durationDays = Math.max(7, Math.min(180, Number(body.durationDays ?? DEFAULT_DURATION_DAYS)));
   const weekdaysOnly = body.weekdaysOnly !== false;
 
-  const db = getDb();
-
-  const existingCampaign = db.prepare(`
+  const existingCampaign = await queryOne(`
     SELECT id
     FROM campaigns
     WHERE campaign_name = ?
     ORDER BY id DESC
     LIMIT 1
-  `).get(campaignName) as { id: number } | undefined;
+  `, [campaignName]) as { id: number } | undefined;
 
-  const campaignId = existingCampaign?.id ?? Number(db.prepare(`
+  const campaignId = existingCampaign?.id ?? Number((await runStatement(`
     INSERT INTO campaigns (
       campaign_name,
       target_industry,
@@ -122,14 +120,14 @@ export async function POST(req: NextRequest) {
       created_at,
       updated_at
     ) VALUES (?, ?, date('now'), date('now', '+90 day'), ?, ?, ?, ?, 'active', datetime('now'), datetime('now'))
-  `).run(
+  `, [
     campaignName,
     'UK businesses needing better web conversion',
     durationDays,
     'Web Development + Ecommerce + Hosting',
     JSON.stringify(['web_development', 'ecommerce', 'hosting']),
     'Run a 90-day organic Facebook content campaign for web services',
-  ).lastInsertRowid);
+  ])).lastInsertId);
 
   let postsCreated = 0;
   let postsExisting = 0;
@@ -143,19 +141,19 @@ export async function POST(req: NextRequest) {
     const dueDate = toIsoDate(scheduled);
     const { title, content } = buildPost(i);
 
-    const existingPost = db.prepare(`
+    const existingPost = await queryOne(`
       SELECT id FROM content_posts
       WHERE campaign_id = ?
         AND platform = 'facebook'
         AND title = ?
         AND scheduled_for = ?
       LIMIT 1
-    `).get(campaignId, title, scheduledFor) as { id: number } | undefined;
+    `, [campaignId, title, scheduledFor]) as { id: number } | undefined;
 
     if (existingPost) {
       postsExisting += 1;
     } else {
-      db.prepare(`
+      await runStatement(`
         INSERT INTO content_posts (
           title,
           post_content,
@@ -167,26 +165,26 @@ export async function POST(req: NextRequest) {
           created_at,
           updated_at
         ) VALUES (?, ?, 'facebook', 'post', 'scheduled', ?, ?, datetime('now'), datetime('now'))
-      `).run(title, content, campaignId, scheduledFor);
+      `, [title, content, campaignId, scheduledFor]);
       postsCreated += 1;
     }
 
-    if (ensureTask(db, '[Facebook Web Campaign] Publish scheduled post', dueDate)) {
+    if (await ensureTask('[Facebook Web Campaign] Publish scheduled post', dueDate)) {
       tasksCreated += 1;
     }
-    if (ensureTask(db, '[Facebook Web Campaign] Reply to comments and DMs', dueDate)) {
+    if (await ensureTask('[Facebook Web Campaign] Reply to comments and DMs', dueDate)) {
       tasksCreated += 1;
     }
   }
 
-  db.prepare(`
+  await runStatement(`
     INSERT INTO activities (campaign_id, activity_type, date, notes, metadata_json, created_at)
     VALUES (?, 'facebook_campaign_queued', datetime('now'), ?, ?, datetime('now'))
-  `).run(
+  `, [
     campaignId,
     'Facebook-only web campaign queue generated.',
     JSON.stringify({ durationDays, weekdaysOnly, campaignName }),
-  );
+  ]);
 
   return NextResponse.json({
     ok: true,

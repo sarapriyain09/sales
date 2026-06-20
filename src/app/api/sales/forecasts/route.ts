@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne } from '@/lib/db-client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -12,7 +12,6 @@ export async function GET(req: NextRequest) {
   const fromDate = searchParams.get('from_date');
   const toDate = searchParams.get('to_date');
 
-  const db = getDb();
   let where = 'WHERE 1=1';
   const params: Array<string | number> = [];
 
@@ -29,7 +28,7 @@ export async function GET(req: NextRequest) {
     params.push(toDate);
   }
 
-  const metrics = db.prepare(`
+  const metrics = await queryOne(`
     SELECT
       COALESCE(SUM(CASE WHEN o.status = 'open' THEN o.estimated_value ELSE 0 END), 0) AS current_pipeline_value,
       COALESCE(SUM(CASE WHEN o.status = 'open' THEN o.estimated_value * (o.probability / 100.0) ELSE 0 END), 0) AS weighted_pipeline,
@@ -38,7 +37,7 @@ export async function GET(req: NextRequest) {
       SUM(CASE WHEN o.status = 'lost' THEN 1 ELSE 0 END) AS lost_count
     FROM opportunities o
     ${where}
-  `).get(...params) as {
+  `, params) as {
     current_pipeline_value: number;
     weighted_pipeline: number;
     closed_revenue: number;
@@ -49,7 +48,7 @@ export async function GET(req: NextRequest) {
   const decisionCount = Number(metrics.won_count) + Number(metrics.lost_count);
   const winRate = decisionCount > 0 ? (Number(metrics.won_count) / decisionCount) * 100 : 0;
 
-  const items = db.prepare(`
+  const items = await queryAll(`
     SELECT o.id, o.opportunity_name, o.estimated_value, o.probability, o.expected_close_date,
       ROUND(COALESCE(o.estimated_value, 0) * (COALESCE(o.probability, 0) / 100.0), 2) AS forecast_value,
       c.name AS company_name, s.name AS stage_name, o.status
@@ -58,7 +57,7 @@ export async function GET(req: NextRequest) {
     LEFT JOIN pipeline_stages s ON s.id = o.stage_id
     ${where}
     ORDER BY o.expected_close_date ASC, o.updated_at DESC
-  `).all(...params);
+  `, params);
 
   return NextResponse.json({
     currentPipelineValue: Number(metrics.current_pipeline_value || 0),

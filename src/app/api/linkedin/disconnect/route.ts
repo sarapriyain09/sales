@@ -8,6 +8,6 @@ export async function POST() {
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
   const userId = (session.user as any).id as number;
-  deleteToken(userId);
+  await deleteToken(userId);
   return NextResponse.json({ ok: true });
 }

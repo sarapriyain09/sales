@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -12,13 +12,12 @@ export async function POST(req: NextRequest, { params }: Params) {
   const body = await req.json();
   if (!body.name?.trim()) return NextResponse.json({ error: 'Name required' }, { status: 400 });
 
-  const db = getDb();
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO contacts (lead_id, name, role, email, phone, linkedin, is_primary)
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(id, body.name.trim(), body.role ?? null, body.email ?? null, body.phone ?? null, body.linkedin ?? null, body.is_primary ? 1 : 0);
+  `, [id, body.name.trim(), body.role ?? null, body.email ?? null, body.phone ?? null, body.linkedin ?? null, body.is_primary ? 1 : 0]);
 
-  const contact = db.prepare('SELECT * FROM contacts WHERE id = ?').get(result.lastInsertRowid);
+  const contact = await queryOne('SELECT * FROM contacts WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(contact, { status: 201 });
 }
 
@@ -28,6 +27,6 @@ export async function DELETE(req: NextRequest, { params }: Params) {
   const { searchParams } = new URL(req.url);
   const contactId = searchParams.get('contact_id');
   if (!contactId) return NextResponse.json({ error: 'contact_id required' }, { status: 400 });
-  getDb().prepare('DELETE FROM contacts WHERE id = ? AND lead_id = ?').run(contactId, (await params).id);
+  await runStatement('DELETE FROM contacts WHERE id = ? AND lead_id = ?', [contactId, (await params).id]);
   return NextResponse.json({ ok: true });
 }

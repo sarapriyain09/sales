@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { runStatement } from '@/lib/db-client';
 import twilio from 'twilio';
 
 export async function POST(req: NextRequest) {
@@ -40,15 +40,14 @@ export async function POST(req: NextRequest) {
       body: body.message,
     });
 
-    const db = getDb();
-    db.prepare(`
+    await runStatement(`
       UPDATE leads
       SET sms_sent_at   = datetime('now'),
           sms_message   = @msg,
           contacted_at  = COALESCE(contacted_at, datetime('now')),
           updated_at    = datetime('now')
       WHERE id = @id
-    `).run({ id: body.leadId, msg: body.message });
+    `, { id: body.leadId, msg: body.message });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

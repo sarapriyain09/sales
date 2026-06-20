@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -11,8 +11,6 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get('status');
   const company = searchParams.get('company');
   const opportunityId = searchParams.get('opportunity_id');
-
-  const db = getDb();
 
   let sql = `
     SELECT q.*, c.name AS company_name, ct.name AS contact_name, o.opportunity_name
@@ -39,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' ORDER BY q.created_at DESC';
 
-  const rows = db.prepare(sql).all(...params);
+  const rows = await queryAll(sql, params);
   return NextResponse.json(rows);
 }
 
@@ -70,7 +68,6 @@ export async function POST(req: NextRequest) {
     }>;
   };
 
-  const db = getDb();
   const items = Array.isArray(body.items) ? body.items : [];
 
   const subtotal = items.reduce((sum, item) => {
@@ -89,10 +86,10 @@ export async function POST(req: NextRequest) {
   }, 0);
 
   const total = subtotal + vatAmount;
-  const count = (db.prepare('SELECT COUNT(*) as c FROM quotes').get() as { c: number }).c;
+  const count = (await queryOne('SELECT COUNT(*) as c FROM quotes') as { c: number }).c;
   const quoteNumber = `Q-${new Date().toISOString().slice(0, 7).replace('-', '')}-${String(count + 1).padStart(3, '0')}`;
 
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO quotes (
       lead_id, company_id, contact_id, opportunity_id, quote_number, status, customer, address, email,
       issue_date, expiry_date, subtotal, vat_amount, total, total_amount, terms, notes, updated_at
@@ -100,7 +97,7 @@ export async function POST(req: NextRequest) {
       @lead_id, @company_id, @contact_id, @opportunity_id, @quote_number, @status, @customer, @address, @email,
       @issue_date, @expiry_date, @subtotal, @vat_amount, @total, @total_amount, @terms, @notes, datetime('now')
     )
-  `).run({
+  `, {
     lead_id: body.lead_id ?? null,
     company_id: body.company_id ?? null,
     contact_id: body.contact_id ?? null,
@@ -120,11 +117,7 @@ export async function POST(req: NextRequest) {
     notes: body.notes ?? null,
   });
 
-  const quoteId = Number(result.lastInsertRowid);
-  const insertItem = db.prepare(`
-    INSERT INTO quote_items (quote_id, product, description, quantity, unit_price, discount, tax, total, amount)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  const quoteId = Number(result.lastInsertId);
 
   for (const item of items) {
     const quantity = Number(item.quantity ?? 0);
@@ -134,7 +127,10 @@ export async function POST(req: NextRequest) {
     const lineBase = Math.max(0, quantity * unitPrice - discount);
     const lineTotal = lineBase + (lineBase * tax / 100);
 
-    insertItem.run(
+    await runStatement(`
+      INSERT INTO quote_items (quote_id, product, description, quantity, unit_price, discount, tax, total, amount)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
       quoteId,
       item.product ?? null,
       item.description ?? item.product ?? 'Item',
@@ -144,9 +140,9 @@ export async function POST(req: NextRequest) {
       tax,
       lineTotal,
       lineTotal,
-    );
+    ]);
   }
 
-  const created = db.prepare('SELECT * FROM quotes WHERE id = ?').get(quoteId);
+  const created = await queryOne('SELECT * FROM quotes WHERE id = ?', [quoteId]);
   return NextResponse.json(created, { status: 201 });
 }

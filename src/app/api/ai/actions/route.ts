@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, runStatement } from '@/lib/db-client';
 
 type ActionPage = 'prospects' | 'pipeline' | 'leads' | 'tasks';
 type ActionScope = 'single' | 'selected' | 'all' | 'open' | 'done';
@@ -67,7 +67,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid action.' }, { status: 400 });
   }
 
-  const db = getDb();
   const ids = cleanIds(body.ids);
 
   let targetLeadIds: number[] = [];
@@ -79,11 +78,11 @@ export async function POST(req: NextRequest) {
     } else if (scope === 'selected') {
       targetTaskIds = ids;
     } else if (scope === 'open') {
-      targetTaskIds = (db.prepare(`SELECT id FROM tasks WHERE done = 0`).all() as Array<{ id: number }>).map(r => r.id);
+      targetTaskIds = (await queryAll(`SELECT id FROM tasks WHERE done = 0`) as Array<{ id: number }>).map(r => r.id);
     } else if (scope === 'done') {
-      targetTaskIds = (db.prepare(`SELECT id FROM tasks WHERE done = 1`).all() as Array<{ id: number }>).map(r => r.id);
+      targetTaskIds = (await queryAll(`SELECT id FROM tasks WHERE done = 1`) as Array<{ id: number }>).map(r => r.id);
     } else if (scope === 'all') {
-      targetTaskIds = (db.prepare(`SELECT id FROM tasks`).all() as Array<{ id: number }>).map(r => r.id);
+      targetTaskIds = (await queryAll(`SELECT id FROM tasks`) as Array<{ id: number }>).map(r => r.id);
     }
   } else {
     if (scope === 'single' && body.leadId) {
@@ -92,7 +91,7 @@ export async function POST(req: NextRequest) {
       targetLeadIds = ids;
     } else if (scope === 'all') {
       const where = page === 'prospects' ? `WHERE stage = 'prospect'` : '';
-      targetLeadIds = (db.prepare(`SELECT id FROM leads ${where}`).all() as Array<{ id: number }>).map(r => r.id);
+      targetLeadIds = (await queryAll(`SELECT id FROM leads ${where}`) as Array<{ id: number }>).map(r => r.id);
     }
   }
 
@@ -103,12 +102,12 @@ export async function POST(req: NextRequest) {
   if (page !== 'tasks') {
     const clause = sqlIn(targetLeadIds);
     if (action === 'mark_contacted') {
-      db.prepare(`UPDATE leads SET contacted_at = datetime('now'), updated_at = datetime('now') WHERE id IN (${clause})`).run(...targetLeadIds);
+      await runStatement(`UPDATE leads SET contacted_at = datetime('now'), updated_at = datetime('now') WHERE id IN (${clause})`, targetLeadIds);
       return NextResponse.json({ ok: true, action, count: targetLeadIds.length });
     }
 
     if (action === 'convert_to_lead') {
-      db.prepare(`UPDATE leads SET stage = 'lead', status = 'new', updated_at = datetime('now') WHERE id IN (${clause})`).run(...targetLeadIds);
+      await runStatement(`UPDATE leads SET stage = 'lead', status = 'new', updated_at = datetime('now') WHERE id IN (${clause})`, targetLeadIds);
       return NextResponse.json({ ok: true, action, count: targetLeadIds.length });
     }
 
@@ -117,7 +116,7 @@ export async function POST(req: NextRequest) {
       if (!['crm', 'digital', 'software', 'ai_automation', 'engineering', 'iot'].includes(vertical)) {
         return NextResponse.json({ error: 'Invalid vertical.' }, { status: 400 });
       }
-      db.prepare(`UPDATE leads SET vertical = ?, updated_at = datetime('now') WHERE id IN (${clause})`).run(vertical, ...targetLeadIds);
+      await runStatement(`UPDATE leads SET vertical = ?, updated_at = datetime('now') WHERE id IN (${clause})`, [vertical, ...targetLeadIds]);
       return NextResponse.json({ ok: true, action, value: vertical, count: targetLeadIds.length });
     }
 
@@ -126,12 +125,12 @@ export async function POST(req: NextRequest) {
       if (!['prospect', 'lead', 'contacted', 'meeting_scheduled', 'requirements', 'proposal_sent', 'negotiation', 'won', 'lost'].includes(stage)) {
         return NextResponse.json({ error: 'Invalid stage.' }, { status: 400 });
       }
-      db.prepare(`UPDATE leads SET stage = ?, updated_at = datetime('now') WHERE id IN (${clause})`).run(stage, ...targetLeadIds);
+      await runStatement(`UPDATE leads SET stage = ?, updated_at = datetime('now') WHERE id IN (${clause})`, [stage, ...targetLeadIds]);
       return NextResponse.json({ ok: true, action, value: stage, count: targetLeadIds.length });
     }
 
     if (action === 'delete_leads') {
-      db.prepare(`DELETE FROM leads WHERE id IN (${clause})`).run(...targetLeadIds);
+      await runStatement(`DELETE FROM leads WHERE id IN (${clause})`, targetLeadIds);
       return NextResponse.json({ ok: true, action, count: targetLeadIds.length });
     }
   }
@@ -139,15 +138,15 @@ export async function POST(req: NextRequest) {
   if (page === 'tasks') {
     const clause = sqlIn(targetTaskIds);
     if (action === 'mark_tasks_done') {
-      db.prepare(`UPDATE tasks SET done = 1 WHERE id IN (${clause})`).run(...targetTaskIds);
+      await runStatement(`UPDATE tasks SET done = 1 WHERE id IN (${clause})`, targetTaskIds);
       return NextResponse.json({ ok: true, action, count: targetTaskIds.length });
     }
     if (action === 'mark_tasks_open') {
-      db.prepare(`UPDATE tasks SET done = 0 WHERE id IN (${clause})`).run(...targetTaskIds);
+      await runStatement(`UPDATE tasks SET done = 0 WHERE id IN (${clause})`, targetTaskIds);
       return NextResponse.json({ ok: true, action, count: targetTaskIds.length });
     }
     if (action === 'delete_tasks') {
-      db.prepare(`DELETE FROM tasks WHERE id IN (${clause})`).run(...targetTaskIds);
+      await runStatement(`DELETE FROM tasks WHERE id IN (${clause})`, targetTaskIds);
       return NextResponse.json({ ok: true, action, count: targetTaskIds.length });
     }
   }

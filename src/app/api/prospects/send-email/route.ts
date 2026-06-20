@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { runStatement } from '@/lib/db-client';
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -51,14 +51,13 @@ export async function POST(req: NextRequest) {
     });
 
     // Record on the lead: mark contacted + store the sent email body
-    const db = getDb();
-    db.prepare(`
+    await runStatement(`
       UPDATE leads
       SET contacted_at = datetime('now'),
           outreach_email = @email,
           updated_at = datetime('now')
       WHERE id = @id
-    `).run({ id: body.leadId, email: body.message });
+    `, { id: body.leadId, email: body.message });
 
     return NextResponse.json({ ok: true });
   } catch (err) {

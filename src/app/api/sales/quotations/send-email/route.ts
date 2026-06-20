@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { runStatement } from '@/lib/db-client';
 import nodemailer from 'nodemailer';
 
 const transporter = nodemailer.createTransport({
@@ -46,20 +46,19 @@ export async function POST(req: NextRequest) {
       attachments: Array.isArray(body.attachments) ? body.attachments : undefined,
     });
 
-    const db = getDb();
-    db.prepare(`
+    await runStatement(`
       INSERT INTO email_history (quote_id, to_email, subject, body, attachments_json, created_by)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       quoteId,
       body.to,
       body.subject,
       body.message,
       Array.isArray(body.attachments) ? JSON.stringify(body.attachments.map(a => a.filename)) : null,
       (session.user as { id?: number | string } | undefined)?.id ?? null,
-    );
+    ]);
 
-    db.prepare("UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, updated_at = datetime('now') WHERE id = ?").run(quoteId);
+    await runStatement("UPDATE quotes SET status = CASE WHEN status = 'draft' THEN 'sent' ELSE status END, updated_at = datetime('now') WHERE id = ?", [quoteId]);
 
     return NextResponse.json({ ok: true });
   } catch (error) {

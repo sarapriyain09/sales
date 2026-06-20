@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
 import { getToken, listFormResponses, getImportedIds, markImported } from '@/lib/linkedin';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 /**
  * GET  /api/linkedin/sync?accountId=123  — preview unimported leads
@@ -17,12 +17,12 @@ export async function GET(req: NextRequest) {
   if (!accountId) return NextResponse.json({ error: 'accountId required' }, { status: 400 });
 
   const userId = (session.user as any).id as number;
-  const tok    = getToken(userId);
+  const tok    = await getToken(userId);
   if (!tok) return NextResponse.json({ error: 'Not connected to LinkedIn' }, { status: 403 });
 
   try {
     const responses  = await listFormResponses(tok.access_token, accountId);
-    const imported   = getImportedIds();
+    const imported   = await getImportedIds();
     const newLeads   = responses.filter(r => !imported.has(r.id));
     return NextResponse.json({ total: responses.length, new: newLeads.length, leads: newLeads });
   } catch (err: unknown) {
@@ -39,14 +39,12 @@ export async function POST(req: NextRequest) {
   if (!accountId) return NextResponse.json({ error: 'accountId required' }, { status: 400 });
 
   const userId = (session.user as any).id as number;
-  const tok    = getToken(userId);
+  const tok    = await getToken(userId);
   if (!tok) return NextResponse.json({ error: 'Not connected to LinkedIn' }, { status: 403 });
-
-  const db = getDb();
 
   try {
     const responses = await listFormResponses(tok.access_token, accountId);
-    const imported  = getImportedIds();
+    const imported  = await getImportedIds();
     const newOnes   = responses.filter(r => !imported.has(r.id));
 
     let created = 0;
@@ -57,39 +55,37 @@ export async function POST(req: NextRequest) {
       const contactName = `${r.firstName ?? ''} ${r.lastName ?? ''}`.trim();
 
       // Insert lead
-      const stmt = db.prepare(`
-        INSERT INTO leads
-          (company_name, email, phone, source, lead_score, status, stage, notes, assigned_to, created_by)
-        VALUES
-          (@company_name, @email, @phone, 'linkedin', 50, 'new', 'lead', @notes, @assigned_to, @created_by)
-      `);
-
       const notes = [
         r.jobTitle ? `Job title: ${r.jobTitle}` : null,
         r.formName ? `LinkedIn form: ${r.formName}` : null,
         `Submitted: ${new Date(r.submittedAt).toLocaleString('en-GB')}`,
       ].filter(Boolean).join('\n');
 
-      const result = stmt.run({
+      const result = await runStatement(`
+        INSERT INTO leads
+          (company_name, email, phone, source, lead_score, status, stage, notes, assigned_to, created_by)
+        VALUES
+          (@company_name, @email, @phone, 'linkedin', 50, 'new', 'lead', @notes, @assigned_to, @created_by)
+      `, {
         company_name: companyName,
         email:        r.email ?? null,
         phone:        r.phone ?? null,
         notes,
         assigned_to:  userId,
         created_by:   userId,
-      });
+      } as unknown as Record<string, string | number | boolean | null>);
 
-      const leadId = result.lastInsertRowid as number;
+      const leadId = Number(result.lastInsertId);
 
       // Insert contact if we have a name
       if (contactName) {
-        db.prepare(`
+        await runStatement(`
           INSERT INTO contacts (lead_id, name, role, email, phone, is_primary)
           VALUES (?, ?, ?, ?, ?, 1)
-        `).run(leadId, contactName, r.jobTitle ?? null, r.email ?? null, r.phone ?? null);
+        `, [leadId, contactName, r.jobTitle ?? null, r.email ?? null, r.phone ?? null]);
       }
 
-      markImported(r.id, leadId);
+      await markImported(r.id, leadId);
       created++;
     }
 

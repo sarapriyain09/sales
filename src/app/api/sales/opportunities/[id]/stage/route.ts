@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryOne, runStatement } from '@/lib/db-client';
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -17,13 +17,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const stageId = Number(body.stage_id);
   if (!Number.isFinite(stageId)) return NextResponse.json({ error: 'stage_id is required' }, { status: 400 });
 
-  const db = getDb();
-  const stage = db.prepare('SELECT id, is_closed, is_won, default_probability FROM pipeline_stages WHERE id = ?').get(stageId) as { id: number; is_closed: number; is_won: number; default_probability: number } | undefined;
+  const stage = await queryOne('SELECT id, is_closed, is_won, default_probability FROM pipeline_stages WHERE id = ?', [stageId]) as { id: number; is_closed: number; is_won: number; default_probability: number } | undefined;
   if (!stage) return NextResponse.json({ error: 'Stage not found' }, { status: 404 });
 
   const nextStatus = stage.is_closed ? (stage.is_won ? 'won' : 'lost') : 'open';
 
-  db.prepare(`
+  await runStatement(`
     UPDATE opportunities
     SET stage_id = ?,
         status = ?,
@@ -34,8 +33,8 @@ export async function PATCH(req: NextRequest, { params }: Params) {
         END,
         updated_at = datetime('now')
     WHERE id = ?
-  `).run(stage.id, nextStatus, stage.default_probability, nextStatus, opportunityId);
+  `, [stage.id, nextStatus, stage.default_probability, nextStatus, opportunityId]);
 
-  const updated = db.prepare('SELECT * FROM opportunities WHERE id = ?').get(opportunityId);
+  const updated = await queryOne('SELECT * FROM opportunities WHERE id = ?', [opportunityId]);
   return NextResponse.json(updated);
 }

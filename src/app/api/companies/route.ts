@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne, runStatement } from '@/lib/db-client';
 import type { Company } from '@/lib/types';
 
 export async function GET(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const { searchParams } = new URL(req.url);
   const status = searchParams.get('status');
   const industry = searchParams.get('industry');
@@ -43,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   sql += ' GROUP BY c.id ORDER BY c.created_at DESC';
 
-  const companies = db.prepare(sql).all(...params);
+  const companies = await queryAll(sql, params);
   return NextResponse.json(companies);
 }
 
@@ -51,7 +50,6 @@ export async function POST(req: NextRequest) {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
   const body = await req.json() as Partial<Company>;
 
   if (!body.name?.trim()) {
@@ -61,15 +59,15 @@ export async function POST(req: NextRequest) {
   const name = body.name.trim();
   const country = body.country?.trim() || null;
 
-  const existing = db.prepare('SELECT * FROM companies WHERE name = ? AND COALESCE(country, "") = COALESCE(?, "")').get(name, country);
+  const existing = await queryOne('SELECT * FROM companies WHERE name = ? AND COALESCE(country, \'\') = COALESCE(?, \'\')', [name, country]);
   if (existing) return NextResponse.json(existing, { status: 200 });
 
-  const result = db.prepare(`
+  const result = await runStatement(`
     INSERT INTO companies
       (name, website, industry, country, source, employee_count, status, notes, updated_at)
     VALUES
       (@name, @website, @industry, @country, @source, @employee_count, @status, @notes, datetime('now'))
-  `).run({
+  `, {
     name,
     website: body.website ?? null,
     industry: body.industry ?? null,
@@ -78,8 +76,8 @@ export async function POST(req: NextRequest) {
     employee_count: body.employee_count ?? null,
     status: body.status ?? 'prospect',
     notes: body.notes ?? null,
-  });
+  } as unknown as Record<string, string | number | boolean | null>);
 
-  const company = db.prepare('SELECT * FROM companies WHERE id = ?').get(result.lastInsertRowid);
+  const company = await queryOne('SELECT * FROM companies WHERE id = ?', [Number(result.lastInsertId)]);
   return NextResponse.json(company, { status: 201 });
 }

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/db';
 import { ensureWeeklyPlaybookTasks } from '@/lib/campaign-playbook';
 
 interface SchedulerBody {
@@ -35,8 +34,7 @@ export async function POST(req: NextRequest) {
   const parsedRunAt = body.runAt ? new Date(body.runAt) : new Date();
   const now = Number.isNaN(parsedRunAt.getTime()) ? new Date() : parsedRunAt;
 
-  const db = getDb();
-  const result = ensureWeeklyPlaybookTasks(db, {
+  const result = await ensureWeeklyPlaybookTasks({
     userId: body.userId ?? null,
     now,
     force: body.force === true,

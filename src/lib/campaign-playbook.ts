@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3';
+import { queryOne, runStatement, withTransaction } from '@/lib/db-client';
 
 export const CRM_DAILY_ACTIVITIES: string[] = [
   '5 LinkedIn connections',
@@ -67,8 +67,7 @@ export function getMondayIsoDate(date: Date = new Date()): string {
   return d.toISOString().slice(0, 10);
 }
 
-export function ensureWeeklyPlaybookTasks(
-  db: Database.Database,
+export async function ensureWeeklyPlaybookTasks(
   options: { userId?: number | null; now?: Date; force?: boolean } = {}
 ) {
   const now = options.now ?? new Date();
@@ -76,37 +75,33 @@ export function ensureWeeklyPlaybookTasks(
   const weekStart = getMondayIsoDate(now);
   const force = options.force ?? false;
 
-  const existingRun = db
-    .prepare('SELECT id FROM campaign_playbook_runs WHERE week_start = ?')
-    .get(weekStart) as { id: number } | undefined;
+  const existingRun = await queryOne(
+    'SELECT id FROM campaign_playbook_runs WHERE week_start = ?',
+    [weekStart]
+  ) as { id: number } | undefined;
 
   if (existingRun && !force) {
     return { created: 0, weekStart, weekEnd: addDaysIso(weekStart, 6), skipped: true };
   }
 
   if (existingRun && force) {
-    db.prepare('DELETE FROM campaign_playbook_runs WHERE id = ?').run(existingRun.id);
+    await runStatement('DELETE FROM campaign_playbook_runs WHERE id = ?', [existingRun.id]);
   }
 
   const plan = buildWeeklyTaskPlan(weekStart);
-  const insertTask = db.prepare(`
+
+  await withTransaction(async () => {
+    for (const item of plan) {
+      await runStatement(`
     INSERT INTO tasks (lead_id, user_id, title, due_date)
     VALUES (?, ?, ?, ?)
-  `);
-
-  const insertRun = db.prepare(`
+  `, [null, userId, item.title, item.due_date]);
+    }
+    await runStatement(`
     INSERT INTO campaign_playbook_runs (week_start, created_at)
     VALUES (?, datetime('now'))
-  `);
-
-  const tx = db.transaction(() => {
-    for (const item of plan) {
-      insertTask.run(null, userId, item.title, item.due_date);
-    }
-    insertRun.run(weekStart);
+  `, [weekStart]);
   });
-
-  tx();
 
   return {
     created: plan.length,

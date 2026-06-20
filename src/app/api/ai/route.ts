@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll, queryOne } from '@/lib/db-client';
 import { generateChatCompletion } from '@/lib/openai';
 
 type AiTask = 'crm_qa' | 'lead_summary' | 'follow_up_email' | 'pipeline_insights';
@@ -21,21 +21,15 @@ function truncate(value: string, max = 2500): string {
   return `${value.slice(0, max)}...`;
 }
 
-function buildLeadContext(db: ReturnType<typeof getDb>, leadId: number) {
-  const lead = db.prepare('SELECT * FROM leads WHERE id = ?').get(leadId) as Record<string, unknown> | undefined;
+async function buildLeadContext(leadId: number) {
+  const lead = await queryOne('SELECT * FROM leads WHERE id = ?', [leadId]) as Record<string, unknown> | undefined;
   if (!lead) return null;
 
-  const notes = db
-    .prepare('SELECT content, created_at FROM notes WHERE lead_id = ? ORDER BY datetime(created_at) DESC LIMIT 5')
-    .all(leadId) as Array<{ content: string; created_at: string }>;
+  const notes = await queryAll('SELECT content, created_at FROM notes WHERE lead_id = ? ORDER BY datetime(created_at) DESC LIMIT 5', [leadId]) as Array<{ content: string; created_at: string }>;
 
-  const tasks = db
-    .prepare('SELECT title, due_date, done FROM tasks WHERE lead_id = ? ORDER BY done ASC, due_date ASC LIMIT 8')
-    .all(leadId) as Array<{ title: string; due_date: string | null; done: number }>;
+  const tasks = await queryAll('SELECT title, due_date, done FROM tasks WHERE lead_id = ? ORDER BY done ASC, due_date ASC LIMIT 8', [leadId]) as Array<{ title: string; due_date: string | null; done: number }>;
 
-  const quotes = db
-    .prepare('SELECT quote_number, status, total, created_at FROM quotes WHERE lead_id = ? ORDER BY datetime(created_at) DESC LIMIT 5')
-    .all(leadId) as Array<{ quote_number: string; status: string; total: number; created_at: string }>;
+  const quotes = await queryAll('SELECT quote_number, status, total, created_at FROM quotes WHERE lead_id = ? ORDER BY datetime(created_at) DESC LIMIT 5', [leadId]) as Array<{ quote_number: string; status: string; total: number; created_at: string }>;
 
   return {
     lead,
@@ -45,32 +39,26 @@ function buildLeadContext(db: ReturnType<typeof getDb>, leadId: number) {
   };
 }
 
-function buildPipelineContext(db: ReturnType<typeof getDb>) {
-  const stageCounts = db
-    .prepare('SELECT stage, COUNT(*) as count FROM leads GROUP BY stage ORDER BY count DESC')
-    .all() as Array<{ stage: string; count: number }>;
+async function buildPipelineContext() {
+  const stageCounts = await queryAll('SELECT stage, COUNT(*) as count FROM leads GROUP BY stage ORDER BY count DESC') as Array<{ stage: string; count: number }>;
 
-  const stalledDeals = db
-    .prepare(`
+  const stalledDeals = await queryAll(`
       SELECT id, company_name, stage, lead_score, updated_at, next_followup_date, opportunity_value
       FROM leads
       WHERE stage NOT IN ('won', 'lost')
         AND datetime(updated_at) <= datetime('now', '-30 days')
       ORDER BY datetime(updated_at) ASC
       LIMIT 25
-    `)
-    .all() as Array<Record<string, unknown>>;
+    `) as Array<Record<string, unknown>>;
 
-  const highValueOpen = db
-    .prepare(`
+  const highValueOpen = await queryAll(`
       SELECT id, company_name, stage, opportunity_value, lead_score
       FROM leads
       WHERE stage NOT IN ('won', 'lost')
         AND opportunity_value IS NOT NULL
       ORDER BY opportunity_value DESC
       LIMIT 15
-    `)
-    .all() as Array<Record<string, unknown>>;
+    `) as Array<Record<string, unknown>>;
 
   return {
     stageCounts,
@@ -146,7 +134,6 @@ export async function POST(req: NextRequest) {
   }
 
   const task = taskRaw as AiTask;
-  const db = getDb();
 
   let context: unknown;
 
@@ -155,33 +142,29 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'leadId is required for this task.' }, { status: 400 });
     }
 
-    const leadContext = buildLeadContext(db, Number(body.leadId));
+    const leadContext = await buildLeadContext(Number(body.leadId));
     if (!leadContext) {
       return NextResponse.json({ error: 'Lead not found.' }, { status: 404 });
     }
     context = leadContext;
   } else if (task === 'pipeline_insights') {
-    context = buildPipelineContext(db);
+    context = await buildPipelineContext();
   } else {
-    const recentLeads = db
-      .prepare(`
+    const recentLeads = await queryAll(`
         SELECT id, company_name, stage, status, lead_score, next_followup_date, updated_at
         FROM leads
         ORDER BY lead_score DESC, datetime(updated_at) DESC
         LIMIT 40
-      `)
-      .all();
+      `);
 
-    const pendingTasks = db
-      .prepare(`
+    const pendingTasks = await queryAll(`
         SELECT t.id, t.title, t.due_date, t.done, l.company_name
         FROM tasks t
         LEFT JOIN leads l ON l.id = t.lead_id
         WHERE t.done = 0
         ORDER BY datetime(t.created_at) DESC
         LIMIT 40
-      `)
-      .all();
+      `);
 
     context = { recentLeads, pendingTasks };
   }

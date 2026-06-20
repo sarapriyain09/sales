@@ -1,24 +1,22 @@
-import { getDb } from './db';
+import { queryOne, runStatement } from '@/lib/db-client';
 import bcrypt from 'bcryptjs';
 import { isDemoMode } from './app-mode';
 
 export async function seedUsers() {
-  const db = getDb();
-  const existing = db.prepare('SELECT id FROM users WHERE email = ?').get('admin@splendidtechnology.co.uk');
+  const existing = await queryOne('SELECT id FROM users WHERE email = ?', ['admin@splendidtechnology.co.uk']);
   if (existing) return;
 
   const hash = await bcrypt.hash('Splendid2024!', 12);
-  db.prepare(`
+  await runStatement(`
     INSERT INTO users (name, email, password, role)
     VALUES (?, ?, ?, ?)
-  `).run('Admin', 'admin@splendidtechnology.co.uk', hash, 'admin');
+  `, ['Admin', 'admin@splendidtechnology.co.uk', hash, 'admin']);
 
   console.log('✓ Default admin user created: admin@splendidtechnology.co.uk / Splendid2024!');
 }
 
 export async function verifyUser(email: string, password: string) {
-  const db = getDb();
-  const user = db.prepare('SELECT * FROM users WHERE email = ?').get(email) as { id: number; name: string; email: string; password: string; role: string; demo_verified?: number } | undefined;
+  const user = await queryOne('SELECT * FROM users WHERE email = ?', [email]) as { id: number; name: string; email: string; password: string; role: string; demo_verified?: number } | undefined;
   if (!user) return null;
   if (isDemoMode() && user.role !== 'admin' && user.demo_verified !== 1) return null;
   const valid = await bcrypt.compare(password, user.password);

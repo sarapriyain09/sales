@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/app/api/auth/[...nextauth]/route';
-import { getDb } from '@/lib/db';
+import { queryAll } from '@/lib/db-client';
 
 const STATUS_ORDER = ['upwork_prospect', 'proposal_sent', 'interview', 'opportunity', 'won', 'lost'];
 
@@ -9,8 +9,7 @@ export async function GET() {
   const session = await getServerSession(authOptions);
   if (!session) return NextResponse.json({ error: 'Unauthorised' }, { status: 401 });
 
-  const db = getDb();
-  const leads = db.prepare(`
+  const leads = await queryAll(`
     SELECT id, company_name, source, stage, lead_score, vertical, updated_at,
            upwork_client_name, upwork_company, upwork_project_title, upwork_project_url,
            upwork_budget, upwork_proposal_date, upwork_proposal_status
@@ -18,14 +17,14 @@ export async function GET() {
     WHERE source = 'upwork'
     ORDER BY datetime(updated_at) DESC
     LIMIT 300
-  `).all() as Array<Record<string, any>>;
+  `) as Array<Record<string, any>>;
 
-  const countsRaw = db.prepare(`
+  const countsRaw = await queryAll(`
     SELECT COALESCE(upwork_proposal_status, 'proposal_sent') as status, COUNT(*) as c
     FROM leads
     WHERE source = 'upwork'
     GROUP BY COALESCE(upwork_proposal_status, 'proposal_sent')
-  `).all() as Array<{ status: string; c: number }>;
+  `) as Array<{ status: string; c: number }>;
 
   const countMap = Object.fromEntries(countsRaw.map(r => [r.status, r.c]));
   const statusCounts = STATUS_ORDER.map(status => ({ status, count: Number(countMap[status] ?? 0) }));

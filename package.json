@@ -6,13 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "migrate:postgres": "node scripts/migrate-sqlite-to-postgres.js",
+    "db:mode": "node -e \"const u=(process.env.DATABASE_URL||'').toLowerCase();console.log(u.startsWith('postgres://')||u.startsWith('postgresql://')?'postgres':'sqlite');\""
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@types/nodemailer": "^8.0.0",
+    "@types/pg": "^8.20.0",
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.10.0",
     "jspdf": "^4.2.1",
@@ -20,6 +23,7 @@
     "next": "16.2.6",
     "next-auth": "^4.24.14",
     "nodemailer": "^7.0.13",
+    "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "twilio": "^6.0.2"
