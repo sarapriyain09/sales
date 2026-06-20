@@ -44,9 +44,12 @@ export default function OpportunitiesPage() {
 
   const [newName, setNewName] = useState('');
   const [newCompanyId, setNewCompanyId] = useState('');
+  const [newStageId, setNewStageId] = useState('');
   const [newValue, setNewValue] = useState('0');
   const [newProbability, setNewProbability] = useState('20');
   const [newCloseDate, setNewCloseDate] = useState('');
+  const [newStatus, setNewStatus] = useState('open');
+  const [newNotes, setNewNotes] = useState('');
 
   const [followUpOpportunityId, setFollowUpOpportunityId] = useState<number | null>(null);
   const [followUpDate, setFollowUpDate] = useState('');
@@ -110,7 +113,7 @@ export default function OpportunitiesPage() {
     e.preventDefault();
     if (!newName.trim()) return;
 
-    const firstStageId = stages[0]?.id ?? null;
+    const stageId = newStageId ? Number(newStageId) : (stages[0]?.id ?? null);
 
     const res = await fetch('/api/sales/opportunities', {
       method: 'POST',
@@ -119,20 +122,28 @@ export default function OpportunitiesPage() {
         opportunity_name: newName,
         company_id: newCompanyId ? Number(newCompanyId) : null,
         pipeline_id: pipelineId,
-        stage_id: firstStageId,
+        stage_id: stageId,
         estimated_value: Number(newValue || 0),
         probability: Number(newProbability || 0),
         expected_close_date: newCloseDate || null,
+        status: newStatus,
+        notes: newNotes || null,
       }),
     });
 
     if (res.ok) {
       setNewName('');
       setNewCompanyId('');
+      setNewStageId('');
       setNewValue('0');
       setNewProbability('20');
       setNewCloseDate('');
+      setNewStatus('open');
+      setNewNotes('');
       await loadOpportunities();
+    } else {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      alert(err.error ?? 'Failed to create opportunity');
     }
   }
 
@@ -210,15 +221,58 @@ export default function OpportunitiesPage() {
         <p className="text-sm text-slate-500">Configurable pipeline with drag-and-drop Kanban.</p>
       </div>
 
-      <form onSubmit={createOpportunity} className="bg-slate-900 border border-slate-800 rounded-xl p-3 grid grid-cols-1 md:grid-cols-6 gap-2">
-        <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Opportunity name" className="md:col-span-2 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" required />
-        <input value={newCompanyId} onChange={(e) => setNewCompanyId(e.target.value)} placeholder="Company ID" className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
-        <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="Estimated value" type="number" className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
-        <input value={newProbability} onChange={(e) => setNewProbability(e.target.value)} placeholder="Probability %" type="number" className="px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
-        <div className="flex gap-2">
-          <input value={newCloseDate} onChange={(e) => setNewCloseDate(e.target.value)} type="date" className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
-          <button className="px-3 py-2 rounded bg-blue-600 text-white text-sm hover:bg-blue-500">Add</button>
+      <form onSubmit={createOpportunity} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+        <div className="text-sm font-semibold text-slate-200">New opportunity</div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label className="block text-xs text-slate-400 md:col-span-2">
+            Opportunity name
+            <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. AI Order Taking System" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" required />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Company ID
+            <input value={newCompanyId} onChange={(e) => setNewCompanyId(e.target.value)} placeholder="e.g. 5" type="number" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
+          </label>
         </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label className="block text-xs text-slate-400">
+            Stage
+            <select value={newStageId} onChange={(e) => setNewStageId(e.target.value)} className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200">
+              <option value="">{stages[0]?.name ? `${stages[0].name} (default)` : 'First stage'}</option>
+              {stages.map((s) => (
+                <option key={s.id} value={s.id}>{s.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block text-xs text-slate-400">
+            Estimated value (GBP)
+            <input value={newValue} onChange={(e) => setNewValue(e.target.value)} placeholder="0" type="number" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Probability %
+            <input value={newProbability} onChange={(e) => setNewProbability(e.target.value)} placeholder="20" type="number" min={0} max={100} className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
+          </label>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <label className="block text-xs text-slate-400">
+            Expected close date
+            <input value={newCloseDate} onChange={(e) => setNewCloseDate(e.target.value)} type="date" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
+          </label>
+          <label className="block text-xs text-slate-400">
+            Status
+            <select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200">
+              <option value="open">Open</option>
+              <option value="won">Won</option>
+              <option value="lost">Lost</option>
+            </select>
+          </label>
+          <div className="flex items-end">
+            <button className="w-full px-3 py-2 rounded bg-blue-600 text-white text-sm hover:bg-blue-500">Add opportunity</button>
+          </div>
+        </div>
+        <label className="block text-xs text-slate-400">
+          Notes
+          <textarea value={newNotes} onChange={(e) => setNewNotes(e.target.value)} rows={2} placeholder="e.g. Client interested in WhatsApp integration" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
+        </label>
       </form>
 
       {loading && <div className="text-sm text-slate-500">Loading opportunities...</div>}
