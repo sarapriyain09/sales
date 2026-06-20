@@ -191,10 +191,10 @@ export default function SalesPipelinePage() {
                   <input type="number" value={stage.default_probability} onChange={(e) => updateStage(idx, 'default_probability', Number(e.target.value))} className="w-24 px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-200" />
                 </td>
                 <td className="px-3 py-2">
-                  <input type="checkbox" checked={Boolean(stage.is_closed)} onChange={(e) => updateStage(idx, 'is_closed', e.target.checked ? 1 : 0)} />
+                  <input type="checkbox" checked={Number(stage.is_closed) === 1} onChange={(e) => updateStage(idx, 'is_closed', e.target.checked ? 1 : 0)} />
                 </td>
                 <td className="px-3 py-2">
-                  <input type="checkbox" checked={Boolean(stage.is_won)} onChange={(e) => updateStage(idx, 'is_won', e.target.checked ? 1 : 0)} />
+                  <input type="checkbox" checked={Number(stage.is_won) === 1} onChange={(e) => updateStage(idx, 'is_won', e.target.checked ? 1 : 0)} />
                 </td>
               </tr>
             ))}
