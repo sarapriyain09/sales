@@ -68,7 +68,9 @@ function normalizeSqlForPostgres(sql: string): string {
 function buildNamedPg(sql: string, params: Record<string, SqlParam>): { text: string; values: SqlParam[] } {
   const values: SqlParam[] = [];
   const seen = new Map<string, number>();
-  const text = sql.replace(/[@:]([a-zA-Z_][a-zA-Z0-9_]*)/g, (_m, name: string) => {
+  // Negative lookbehind for @/: so the `::` cast operator (e.g. `(...)::timestamp`
+  // emitted by the SQLite->Postgres translator) is never mistaken for a named param.
+  const text = sql.replace(/(?<![@:])[@:]([a-zA-Z_][a-zA-Z0-9_]*)/g, (_m, name: string) => {
     if (!seen.has(name)) {
       values.push(name in params ? params[name] : null);
       seen.set(name, values.length);

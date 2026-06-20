@@ -15,12 +15,14 @@ type Opportunity = {
   opportunity_name: string;
   stage_id: number | null;
   stage_name?: string;
+  company_id?: number | null;
   company_name?: string | null;
   contact_name?: string | null;
   estimated_value: number;
   probability: number;
   expected_close_date?: string | null;
   status: string;
+  notes?: string | null;
 };
 
 function money(value: number) {
@@ -50,6 +52,9 @@ export default function OpportunitiesPage() {
   const [followUpDate, setFollowUpDate] = useState('');
   const [followUpType, setFollowUpType] = useState('Call');
   const [followUpComment, setFollowUpComment] = useState('');
+
+  const [editItem, setEditItem] = useState<Opportunity | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   async function loadPipelineAndStages() {
     const pipelinesRes = await fetch('/api/sales/pipelines');
@@ -156,6 +161,48 @@ export default function OpportunitiesPage() {
     }
   }
 
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editItem) return;
+    setSavingEdit(true);
+    const res = await fetch(`/api/sales/opportunities/${editItem.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        opportunity_name: editItem.opportunity_name,
+        company_id: editItem.company_id ? Number(editItem.company_id) : null,
+        stage_id: editItem.stage_id,
+        estimated_value: Number(editItem.estimated_value || 0),
+        probability: Number(editItem.probability || 0),
+        expected_close_date: editItem.expected_close_date || null,
+        status: editItem.status,
+        notes: editItem.notes ?? null,
+      }),
+    });
+    setSavingEdit(false);
+    if (res.ok) {
+      setEditItem(null);
+      await loadOpportunities();
+    } else {
+      const err = await res.json().catch(() => ({})) as { error?: string };
+      alert(err.error ?? 'Failed to update opportunity');
+    }
+  }
+
+  async function deleteOpportunity() {
+    if (!editItem) return;
+    if (!confirm(`Delete opportunity "${editItem.opportunity_name}"? This cannot be undone.`)) return;
+    setSavingEdit(true);
+    const res = await fetch(`/api/sales/opportunities/${editItem.id}`, { method: 'DELETE' });
+    setSavingEdit(false);
+    if (res.ok) {
+      setEditItem(null);
+      await loadOpportunities();
+    } else {
+      alert('Failed to delete opportunity');
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div>
@@ -217,12 +264,20 @@ export default function OpportunitiesPage() {
                         <div className="text-sm text-slate-100 font-medium">{item.opportunity_name}</div>
                         <div className="text-xs text-slate-400">{item.company_name ?? 'No company'}</div>
                         <div className="text-xs text-slate-500 mt-1">{money(Number(item.estimated_value || 0))} • {item.probability}%</div>
-                        <button
-                          onClick={() => setFollowUpOpportunityId(item.id)}
-                          className="mt-2 px-2 py-1 rounded bg-slate-700 text-xs text-slate-200 hover:bg-slate-600"
-                        >
-                          Add Follow-up
-                        </button>
+                        <div className="mt-2 flex gap-2">
+                          <button
+                            onClick={() => setEditItem({ ...item })}
+                            className="px-2 py-1 rounded bg-blue-700 text-xs text-white hover:bg-blue-600"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => setFollowUpOpportunityId(item.id)}
+                            className="px-2 py-1 rounded bg-slate-700 text-xs text-slate-200 hover:bg-slate-600"
+                          >
+                            Add Follow-up
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -250,6 +305,128 @@ export default function OpportunitiesPage() {
             <button onClick={addFollowUp} className="px-3 py-2 rounded bg-emerald-700 text-white text-sm hover:bg-emerald-600">Save follow-up</button>
             <button onClick={() => setFollowUpOpportunityId(null)} className="px-3 py-2 rounded bg-slate-800 text-slate-300 text-sm hover:bg-slate-700">Cancel</button>
           </div>
+        </div>
+      )}
+
+      {editItem && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => !savingEdit && setEditItem(null)}>
+          <form
+            onSubmit={saveEdit}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-lg bg-slate-900 border border-slate-700 rounded-xl p-5 space-y-3 max-h-[90vh] overflow-y-auto"
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="text-base font-semibold text-slate-100">Edit opportunity</h2>
+              <button type="button" onClick={() => setEditItem(null)} className="text-slate-400 hover:text-slate-200 text-lg leading-none">×</button>
+            </div>
+
+            <label className="block text-xs text-slate-400">
+              Opportunity name
+              <input
+                value={editItem.opportunity_name}
+                onChange={(e) => setEditItem({ ...editItem, opportunity_name: e.target.value })}
+                className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                required
+              />
+            </label>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block text-xs text-slate-400">
+                Company ID
+                <input
+                  value={editItem.company_id ?? ''}
+                  onChange={(e) => setEditItem({ ...editItem, company_id: e.target.value ? Number(e.target.value) : null })}
+                  type="number"
+                  placeholder="e.g. 5"
+                  className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                />
+              </label>
+              <label className="block text-xs text-slate-400">
+                Stage
+                <select
+                  value={editItem.stage_id ?? ''}
+                  onChange={(e) => setEditItem({ ...editItem, stage_id: e.target.value ? Number(e.target.value) : null })}
+                  className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                >
+                  {stages.map((s) => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <label className="block text-xs text-slate-400">
+                Estimated value (GBP)
+                <input
+                  value={editItem.estimated_value}
+                  onChange={(e) => setEditItem({ ...editItem, estimated_value: Number(e.target.value) })}
+                  type="number"
+                  className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                />
+              </label>
+              <label className="block text-xs text-slate-400">
+                Probability %
+                <input
+                  value={editItem.probability}
+                  onChange={(e) => setEditItem({ ...editItem, probability: Number(e.target.value) })}
+                  type="number"
+                  min={0}
+                  max={100}
+                  className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                />
+              </label>
+              <label className="block text-xs text-slate-400">
+                Close date
+                <input
+                  value={editItem.expected_close_date ? String(editItem.expected_close_date).slice(0, 10) : ''}
+                  onChange={(e) => setEditItem({ ...editItem, expected_close_date: e.target.value || null })}
+                  type="date"
+                  className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+                />
+              </label>
+            </div>
+
+            <label className="block text-xs text-slate-400">
+              Status
+              <select
+                value={editItem.status ?? 'open'}
+                onChange={(e) => setEditItem({ ...editItem, status: e.target.value })}
+                className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+              >
+                <option value="open">Open</option>
+                <option value="won">Won</option>
+                <option value="lost">Lost</option>
+              </select>
+            </label>
+
+            <label className="block text-xs text-slate-400">
+              Notes
+              <textarea
+                value={editItem.notes ?? ''}
+                onChange={(e) => setEditItem({ ...editItem, notes: e.target.value })}
+                rows={3}
+                className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+              />
+            </label>
+
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={deleteOpportunity}
+                disabled={savingEdit}
+                className="px-3 py-2 rounded bg-red-700 text-white text-sm hover:bg-red-600 disabled:opacity-50"
+              >
+                Delete
+              </button>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setEditItem(null)} disabled={savingEdit} className="px-3 py-2 rounded bg-slate-800 text-slate-300 text-sm hover:bg-slate-700">Cancel</button>
+                <button type="submit" disabled={savingEdit} className="px-4 py-2 rounded bg-blue-600 text-white text-sm hover:bg-blue-500 disabled:opacity-50">
+                  {savingEdit ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
+            </div>
+          </form>
         </div>
       )}
     </div>

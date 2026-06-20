@@ -46,7 +46,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
   const { id } = await params;
   const body = await req.json() as Record<string, unknown>;
 
-  const fields = Object.keys(body).filter(k => k !== 'id');
+  const ALLOWED_COLUMNS = new Set([
+    'opportunity_name', 'company_id', 'contact_id', 'lead_id', 'pipeline_id', 'stage_id',
+    'estimated_value', 'probability', 'expected_close_date', 'assigned_user', 'status', 'notes',
+  ]);
+  const fields = Object.keys(body).filter(k => ALLOWED_COLUMNS.has(k));
   if (fields.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
 
   const setClause = fields.map(f => `${f} = @${f}`).join(', ');
