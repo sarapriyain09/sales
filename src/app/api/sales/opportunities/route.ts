@@ -92,6 +92,7 @@ export async function POST(req: NextRequest) {
     assigned_user?: number | null;
     status?: string;
     notes?: string | null;
+    source?: string | null;
   };
 
   const opportunityName = (body.opportunity_name ?? '').trim();
@@ -115,10 +116,10 @@ export async function POST(req: NextRequest) {
   const result = await runStatement(`
     INSERT INTO opportunities (
       opportunity_name, company_id, contact_id, lead_id, pipeline_id, stage_id,
-      estimated_value, probability, expected_close_date, assigned_user, status, notes, won_at, updated_at
+      estimated_value, probability, expected_close_date, assigned_user, status, notes, source, won_at, updated_at
     ) VALUES (
       @opportunity_name, @company_id, @contact_id, @lead_id, @pipeline_id, @stage_id,
-      @estimated_value, @probability, @expected_close_date, @assigned_user, @status, @notes, @won_at, datetime('now')
+      @estimated_value, @probability, @expected_close_date, @assigned_user, @status, @notes, @source, @won_at, datetime('now')
     )
   `, {
     opportunity_name: opportunityName,
@@ -133,6 +134,7 @@ export async function POST(req: NextRequest) {
     assigned_user: body.assigned_user ?? (session.user as { id?: number | string } | undefined)?.id ?? null,
     status: (body.status ?? 'open').toLowerCase(),
     notes: body.notes ?? null,
+    source: (body.source ?? '').trim() || null,
     won_at: (body.status ?? 'open').toLowerCase() === 'won' ? new Date().toISOString() : null,
   });
 

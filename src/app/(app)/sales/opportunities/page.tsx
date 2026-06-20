@@ -23,7 +23,22 @@ type Opportunity = {
   expected_close_date?: string | null;
   status: string;
   notes?: string | null;
+  source?: string | null;
 };
+
+const SOURCE_OPTIONS = [
+  { value: 'upwork', label: 'Upwork' },
+  { value: 'linkedin', label: 'LinkedIn' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'website', label: 'Website' },
+  { value: 'cold', label: 'Cold Outreach' },
+  { value: 'other', label: 'Other' },
+];
+
+function sourceLabel(value?: string | null) {
+  if (!value) return null;
+  return SOURCE_OPTIONS.find((o) => o.value === value)?.label ?? value;
+}
 
 function money(value: number) {
   return `GBP ${value.toLocaleString('en-GB', { maximumFractionDigits: 2 })}`;
@@ -41,6 +56,7 @@ export default function OpportunitiesPage() {
   const [stages, setStages] = useState<Stage[]>([]);
   const [items, setItems] = useState<Opportunity[]>([]);
   const [loading, setLoading] = useState(true);
+  const [viewType, setViewType] = useState<'board' | 'list'>('board');
 
   const [newName, setNewName] = useState('');
   const [newCompanyId, setNewCompanyId] = useState('');
@@ -49,6 +65,7 @@ export default function OpportunitiesPage() {
   const [newProbability, setNewProbability] = useState('20');
   const [newCloseDate, setNewCloseDate] = useState('');
   const [newStatus, setNewStatus] = useState('open');
+  const [newSource, setNewSource] = useState('');
   const [newNotes, setNewNotes] = useState('');
 
   const [followUpOpportunityId, setFollowUpOpportunityId] = useState<number | null>(null);
@@ -127,6 +144,7 @@ export default function OpportunitiesPage() {
         probability: Number(newProbability || 0),
         expected_close_date: newCloseDate || null,
         status: newStatus,
+        source: newSource || null,
         notes: newNotes || null,
       }),
     });
@@ -139,6 +157,7 @@ export default function OpportunitiesPage() {
       setNewProbability('20');
       setNewCloseDate('');
       setNewStatus('open');
+      setNewSource('');
       setNewNotes('');
       await loadOpportunities();
     } else {
@@ -187,6 +206,7 @@ export default function OpportunitiesPage() {
         probability: Number(editItem.probability || 0),
         expected_close_date: editItem.expected_close_date || null,
         status: editItem.status,
+        source: editItem.source || null,
         notes: editItem.notes ?? null,
       }),
     });
@@ -216,9 +236,27 @@ export default function OpportunitiesPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold text-slate-100">Opportunities</h1>
-        <p className="text-sm text-slate-500">Configurable pipeline with drag-and-drop Kanban.</p>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-slate-100">Opportunities</h1>
+          <p className="text-sm text-slate-500">Configurable pipeline with drag-and-drop Kanban.</p>
+        </div>
+        <div className="flex rounded-lg border border-slate-700 overflow-hidden text-sm">
+          <button
+            type="button"
+            onClick={() => setViewType('board')}
+            className={`px-3 py-1.5 ${viewType === 'board' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+          >
+            Board
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewType('list')}
+            className={`px-3 py-1.5 ${viewType === 'list' ? 'bg-blue-600 text-white' : 'bg-slate-800 text-slate-300 hover:bg-slate-700'}`}
+          >
+            List
+          </button>
+        </div>
       </div>
 
       <form onSubmit={createOpportunity} className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
@@ -270,6 +308,15 @@ export default function OpportunitiesPage() {
           </div>
         </div>
         <label className="block text-xs text-slate-400">
+          Source
+          <select value={newSource} onChange={(e) => setNewSource(e.target.value)} className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200">
+            <option value="">No source</option>
+            {SOURCE_OPTIONS.map((o) => (
+              <option key={o.value} value={o.value}>{o.label}</option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-slate-400">
           Notes
           <textarea value={newNotes} onChange={(e) => setNewNotes(e.target.value)} rows={2} placeholder="e.g. Client interested in WhatsApp integration" className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200" />
         </label>
@@ -277,7 +324,7 @@ export default function OpportunitiesPage() {
 
       {loading && <div className="text-sm text-slate-500">Loading opportunities...</div>}
 
-      {!loading && (
+      {!loading && viewType === 'board' && (
         <DndContext sensors={sensors} collisionDetection={closestCorners} onDragEnd={onDragEnd}>
           <div className="overflow-x-auto pb-3">
             <div className="flex gap-3 min-w-[1000px]">
@@ -318,6 +365,9 @@ export default function OpportunitiesPage() {
                         <div className="text-sm text-slate-100 font-medium">{item.opportunity_name}</div>
                         <div className="text-xs text-slate-400">{item.company_name ?? 'No company'}</div>
                         <div className="text-xs text-slate-500 mt-1">{money(Number(item.estimated_value || 0))} • {item.probability}%</div>
+                        {sourceLabel(item.source) && (
+                          <span className="inline-block mt-1 px-2 py-0.5 rounded-full bg-slate-700 text-[10px] text-slate-300">{sourceLabel(item.source)}</span>
+                        )}
                         <div className="mt-2 flex gap-2">
                           <button
                             onClick={() => setEditItem({ ...item })}
@@ -340,6 +390,51 @@ export default function OpportunitiesPage() {
             </div>
           </div>
         </DndContext>
+      )}
+
+      {!loading && viewType === 'list' && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-slate-800 text-xs text-slate-500">
+                <th className="px-3 py-2 text-left">Opportunity</th>
+                <th className="px-3 py-2 text-left">Company</th>
+                <th className="px-3 py-2 text-left">Stage</th>
+                <th className="px-3 py-2 text-left">Source</th>
+                <th className="px-3 py-2 text-right">Value</th>
+                <th className="px-3 py-2 text-right">Prob.</th>
+                <th className="px-3 py-2 text-left">Status</th>
+                <th className="px-3 py-2 text-left">Close date</th>
+                <th className="px-3 py-2 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item) => (
+                <tr key={item.id} className="border-b border-slate-800/70 hover:bg-slate-800/40">
+                  <td className="px-3 py-2 text-slate-100 font-medium">{item.opportunity_name}</td>
+                  <td className="px-3 py-2 text-slate-400">{item.company_name ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-300">{item.stage_name ?? '—'}</td>
+                  <td className="px-3 py-2 text-slate-400">{sourceLabel(item.source) ?? '—'}</td>
+                  <td className="px-3 py-2 text-right text-slate-300">{money(Number(item.estimated_value || 0))}</td>
+                  <td className="px-3 py-2 text-right text-slate-400">{item.probability}%</td>
+                  <td className="px-3 py-2">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] ${item.status === 'won' ? 'bg-emerald-700 text-white' : item.status === 'lost' ? 'bg-red-700 text-white' : 'bg-slate-700 text-slate-200'}`}>{item.status}</span>
+                  </td>
+                  <td className="px-3 py-2 text-slate-400">{item.expected_close_date ? String(item.expected_close_date).slice(0, 10) : '—'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditItem({ ...item })} className="px-2 py-1 rounded bg-blue-700 text-xs text-white hover:bg-blue-600">Edit</button>
+                      <button onClick={() => setFollowUpOpportunityId(item.id)} className="px-2 py-1 rounded bg-slate-700 text-xs text-slate-200 hover:bg-slate-600">Follow-up</button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {items.length === 0 && (
+                <tr><td colSpan={9} className="px-3 py-4 text-center text-slate-500">No opportunities yet.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {followUpOpportunityId && (
@@ -451,6 +546,20 @@ export default function OpportunitiesPage() {
                 <option value="open">Open</option>
                 <option value="won">Won</option>
                 <option value="lost">Lost</option>
+              </select>
+            </label>
+
+            <label className="block text-xs text-slate-400">
+              Source
+              <select
+                value={editItem.source ?? ''}
+                onChange={(e) => setEditItem({ ...editItem, source: e.target.value || null })}
+                className="mt-1 w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-slate-200"
+              >
+                <option value="">No source</option>
+                {SOURCE_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
               </select>
             </label>
 

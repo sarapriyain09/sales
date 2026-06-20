@@ -48,7 +48,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 
   const ALLOWED_COLUMNS = new Set([
     'opportunity_name', 'company_id', 'contact_id', 'lead_id', 'pipeline_id', 'stage_id',
-    'estimated_value', 'probability', 'expected_close_date', 'assigned_user', 'status', 'notes',
+    'estimated_value', 'probability', 'expected_close_date', 'assigned_user', 'status', 'notes', 'source',
   ]);
   const fields = Object.keys(body).filter(k => ALLOWED_COLUMNS.has(k));
   if (fields.length === 0) return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });

@@ -95,10 +95,10 @@ export async function POST(req: NextRequest) {
     await runStatement(`
       INSERT INTO opportunities (
         opportunity_name, lead_id, pipeline_id, stage_id,
-        estimated_value, probability, expected_close_date, status, notes, won_at, updated_at
+        estimated_value, probability, expected_close_date, status, notes, source, won_at, updated_at
       ) VALUES (
         @opportunity_name, @lead_id, @pipeline_id, @stage_id,
-        @estimated_value, @probability, @expected_close_date, @status, @notes,
+        @estimated_value, @probability, @expected_close_date, @status, @notes, 'upwork',
         CASE WHEN @status = 'won' THEN datetime('now') ELSE NULL END,
         datetime('now')
       )
