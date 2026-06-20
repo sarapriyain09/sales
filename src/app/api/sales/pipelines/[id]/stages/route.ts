@@ -44,24 +44,63 @@ export async function PUT(req: NextRequest, { params }: Params) {
   }
 
   await withTransaction(async () => {
-    await runStatement('DELETE FROM pipeline_stages WHERE pipeline_id = ?', [pipelineId]);
+    const existing = await queryAll('SELECT id FROM pipeline_stages WHERE pipeline_id = ?', [pipelineId]) as Array<{ id: number }>;
+    const existingIds = new Set(existing.map((row) => Number(row.id)));
+    const keptIds = new Set<number>();
 
+    // Update existing stages in place (preserving ids) and insert new ones.
     for (let i = 0; i < stages.length; i += 1) {
       const stage = stages[i];
       const stageName = (stage.name ?? '').trim();
       if (!stageName) continue;
 
-      await runStatement(`
-        INSERT INTO pipeline_stages (pipeline_id, name, sort_order, is_closed, is_won, default_probability, updated_at)
-        VALUES (@pipeline_id, @name, @sort_order, @is_closed, @is_won, @default_probability, datetime('now'))
-      `, {
+      const fields = {
         pipeline_id: pipelineId,
         name: stageName,
         sort_order: Number.isFinite(stage.sort_order) ? Number(stage.sort_order) : i + 1,
         is_closed: stage.is_closed ? 1 : 0,
         is_won: stage.is_won ? 1 : 0,
         default_probability: Number.isFinite(stage.default_probability) ? Number(stage.default_probability) : 0,
-      });
+      };
+
+      const incomingId = Number(stage.id);
+      if (Number.isFinite(incomingId) && incomingId > 0 && existingIds.has(incomingId)) {
+        await runStatement(`
+          UPDATE pipeline_stages
+          SET name = @name, sort_order = @sort_order, is_closed = @is_closed,
+              is_won = @is_won, default_probability = @default_probability, updated_at = datetime('now')
+          WHERE id = @id AND pipeline_id = @pipeline_id
+        `, { ...fields, id: incomingId });
+        keptIds.add(incomingId);
+      } else {
+        await runStatement(`
+          INSERT INTO pipeline_stages (pipeline_id, name, sort_order, is_closed, is_won, default_probability, updated_at)
+          VALUES (@pipeline_id, @name, @sort_order, @is_closed, @is_won, @default_probability, datetime('now'))
+        `, fields);
+      }
+    }
+
+    // Stages removed in this edit: reassign their opportunities to a surviving stage, then delete.
+    const toDelete = [...existingIds].filter((id) => !keptIds.has(id));
+    if (toDelete.length > 0) {
+      const placeholders = toDelete.map(() => '?').join(', ');
+      const fallback = await queryOne(
+        `SELECT id FROM pipeline_stages WHERE pipeline_id = ? AND id NOT IN (${placeholders}) ORDER BY sort_order ASC, id ASC LIMIT 1`,
+        [pipelineId, ...toDelete]
+      ) as { id: number } | undefined;
+
+      if (fallback) {
+        for (const delId of toDelete) {
+          await runStatement(
+            'UPDATE opportunities SET stage_id = ?, updated_at = datetime(\'now\') WHERE stage_id = ?',
+            [fallback.id, delId]
+          );
+        }
+      }
+
+      for (const delId of toDelete) {
+        await runStatement('DELETE FROM pipeline_stages WHERE id = ? AND pipeline_id = ?', [delId, pipelineId]);
+      }
     }
 
     await runStatement('UPDATE pipelines SET updated_at = datetime(\'now\') WHERE id = ?', [pipelineId]);

@@ -60,7 +60,7 @@ export default function SalesPipelinePage() {
     setStages((prev) => ([
       ...prev,
       {
-        id: Date.now(),
+        id: -Date.now(),
         name: 'New Stage',
         sort_order: prev.length + 1,
         is_closed: 0,
@@ -74,6 +74,7 @@ export default function SalesPipelinePage() {
     if (!selectedPipelineId) return;
 
     const payload = stages.map((stage, index) => ({
+      id: stage.id,
       name: stage.name,
       sort_order: index + 1,
       is_closed: Number(stage.is_closed),
