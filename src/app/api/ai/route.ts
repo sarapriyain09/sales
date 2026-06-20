@@ -170,7 +170,7 @@ export async function POST(req: NextRequest) {
   }
 
   const systemPrompt = [
-    'You are Splendid CRM AI Assistant for a UK B2B sales team.',
+    'You are Velynxia CRM AI Assistant for a UK B2B sales team.',
     'Be concise, practical, and action-oriented.',
     'Never invent facts. If data is missing, say what is missing.',
     'Prefer bullet points and short sections.',

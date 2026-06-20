@@ -89,8 +89,8 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-blue-600 text-white font-bold text-xl mb-4">ST</div>
-          <h1 className="text-2xl font-bold text-slate-900">Splendid Sales</h1>
-          <p className="text-sm text-slate-600 mt-1">{isDemoMode ? 'Demo Access' : 'Splendid Technology - Sales System'}</p>
+          <h1 className="text-2xl font-bold text-slate-900">Velynxia Sales</h1>
+          <p className="text-sm text-slate-600 mt-1">{isDemoMode ? 'Demo Access' : 'Velynxia - Sales System'}</p>
         </div>
 
         {showPostRegistrationPanel && (
@@ -254,7 +254,7 @@ export default function LoginPage() {
         )}
 
         <p className="text-center text-xs text-slate-500 mt-4">
-          Internal use only · Splendid Technology
+          Internal use only · Velynxia
         </p>
       </div>
     </div>

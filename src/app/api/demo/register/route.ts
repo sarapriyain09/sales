@@ -92,10 +92,10 @@ export async function POST(req: NextRequest) {
     }
 
     await transporter.sendMail({
-      from: `"${process.env.SMTP_FROM_NAME ?? 'Splendid Technology'}" <${process.env.SMTP_USER}>`,
+      from: `"${process.env.SMTP_FROM_NAME ?? 'Velynxia'}" <${process.env.SMTP_USER}>`,
       replyTo: process.env.SMTP_REPLY_TO ?? process.env.SMTP_USER,
       to: email,
-      subject: 'Activate your Splendid CRM demo access',
+      subject: 'Activate your Velynxia CRM demo access',
       text: `Hi ${name},\n\nPlease activate your demo account by opening this link:\n${activateUrl}\n\nThis link expires in 24 hours.\n`,
       html: `<p>Hi ${name},</p><p>Please activate your demo account by clicking the link below:</p><p><a href="${activateUrl}">${activateUrl}</a></p><p>This link expires in 24 hours.</p>`,
     });

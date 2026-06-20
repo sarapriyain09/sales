@@ -153,7 +153,7 @@ export async function POST(req: NextRequest) {
           notes: lead.notes,
         });
         await transporter!.sendMail({
-          from: `"${process.env.SMTP_FROM_NAME ?? 'Splendid Technology'}" <${process.env.SMTP_USER}>`,
+          from: `"${process.env.SMTP_FROM_NAME ?? 'Velynxia'}" <${process.env.SMTP_USER}>`,
           replyTo: process.env.SMTP_REPLY_TO ?? process.env.SMTP_USER,
           to: lead.email,
           subject: emailDraft.subject ?? `Quick note for ${lead.company_name}`,

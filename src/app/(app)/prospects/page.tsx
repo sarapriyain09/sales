@@ -25,9 +25,9 @@ function buildSMS(prospect: Lead): string {
   const reasons = (prospect.notes ?? '').split(' · ').filter(Boolean);
   const hasNoWebsite = reasons.some(r => r.toLowerCase().includes('no website'));
   if (hasNoWebsite) {
-    return `Hi, I'm from Splendid Technology. We build professional websites from £50. Can we book a quick chat? splendidtechnology.co.uk`;
+    return `Hi, I'm from Velynxia. We build professional websites from £50. Can we book a quick chat? splendidtechnology.co.uk`;
   }
-  return `Hi, I spotted issues with your website costing you customers. Can we book an appointment to fix them? Splendid Technology - splendidtechnology.co.uk`;
+  return `Hi, I spotted issues with your website costing you customers. Can we book an appointment to fix them? Velynxia - splendidtechnology.co.uk`;
 }
 
 // ─── SMS compose modal ───────────────────────────────────────────────────────
@@ -135,13 +135,13 @@ function buildEmail(prospect: Lead): { subject: string; message: string } {
   const isEngineering = prospect.vertical === 'engineering';
 
   if (isEngineering) {
-    const subject = `Engineering Design & CAD Support – Splendid Engineering Services`;
+    const subject = `Engineering Design & CAD Support – Velynxia Engineering Services`;
     const message =
 `Dear ${name},
 
 I hope this message finds you well.
 
-My name is Raja Saravanan, and I reach out on behalf of Splendid Engineering Services — a UK-based engineering support company specialising in CAD design, CAE analysis, and technical drafting for manufacturers.
+My name is Raja Saravanan, and I reach out on behalf of Velynxia Engineering Services — a UK-based engineering support company specialising in CAD design, CAE analysis, and technical drafting for manufacturers.
 
 We work with manufacturing companies across the Midlands and the UK, providing flexible engineering capacity without the overhead of permanent hires:
 
@@ -163,7 +163,7 @@ Kind regards,
 Raja Saravanan
 Founder & Business Development Lead
 
-Splendid Engineering Services
+Velynxia Engineering Services
 
 📞 Mobile: 07723 144910
 📧 raja@splendidtechnology.co.uk
@@ -174,13 +174,13 @@ CAD Design | FEA Analysis | CFD | Drafting | Reverse Engineering`;
   }
 
   if (isNewCompany && !isAccountant) {
-    const subject = `Congratulations on Your New Business – Splendid Technology`;
+    const subject = `Congratulations on Your New Business – Velynxia`;
     const message =
 `Dear ${name},
 
 Congratulations on registering your new company! Starting a business is a big step, and we'd love to help you get off to the best possible start.
 
-At Splendid Technology, we specialise in helping new businesses build a strong digital foundation:
+At Velynxia, we specialise in helping new businesses build a strong digital foundation:
 
   • Professional websites from £499 — get online and get found
   • Business email (yourname@yourdomain.co.uk) — look professional from day one
@@ -196,7 +196,7 @@ Kind regards,
 Raja Saravanan
 Founder & Business Development Lead
 
-Splendid Technology
+Velynxia
 
 📞 Mobile: 07723 144910
 📧 raja@splendidtechnology.co.uk
@@ -207,13 +207,13 @@ Websites | Hosting | Business Email | CRM Solutions | Business Process Automatio
   }
 
   if (isAccountant) {
-    const subject = `Business Collaboration Opportunity – Splendid Technology`;
+    const subject = `Business Collaboration Opportunity – Velynxia`;
     const message =
 `Dear ${name},
 
 I hope you are doing well.
 
-My name is Raja Saravanan, and I am the Founder & Business Development Lead at Splendid Technology.
+My name is Raja Saravanan, and I am the Founder & Business Development Lead at Velynxia.
 
 We work with small and medium-sized businesses, helping them improve their digital presence through professional websites, business email solutions, hosting, CRM systems, and business process automation.
 
@@ -230,7 +230,7 @@ Kind regards,
 Raja Saravanan
 Founder & Business Development Lead
 
-Splendid Technology
+Velynxia
 
 📞 Mobile: 07723 144910
 📧 raja@splendidtechnology.co.uk
@@ -249,11 +249,11 @@ Websites | Hosting | Business Email | CRM Solutions | Business Process Automatio
     .filter(Boolean)
     .map(r => `  • ${r}`)
     .join('\n');
-  const subject = `Your website – quick note from Splendid Technology`;
+  const subject = `Your website – quick note from Velynxia`;
   const hasNoWebsite = reasons.some(r => r.toLowerCase().includes('no website'));
   const message = hasNoWebsite
-    ? `Hi ${name},\n\nI noticed your business doesn't currently have a website. In today's market, most customers search online before making a call — so not having a website means missing out on new enquiries every day.\n\nAt Splendid Technology, we build professional, mobile-friendly websites starting from just £499. We'd love to help get you online.\n\nWould you be open to a free 15-minute chat this week?\n\nKind regards,\n\nRaja Saravanan\nFounder & Business Development Lead\n\nSplendid Technology\n\n📞 Mobile: 07723 144910\n📧 raja@splendidtechnology.co.uk\n🌐 www.splendidtechnology.co.uk\n\nWebsites | Hosting | Business Email | CRM Solutions | Business Process Automation`
-    : `Hi ${name},\n\nI came across your website and noticed a few things that could be holding your business back online:\n\n${issueLines || '  • Several improvements available'}\n\nAt Splendid Technology, we help businesses like yours fix these issues quickly and affordably — with no jargon.\n\nWould you be open to a free 15-minute call this week to see if we can help?\n\nKind regards,\n\nRaja Saravanan\nFounder & Business Development Lead\n\nSplendid Technology\n\n📞 Mobile: 07723 144910\n📧 raja@splendidtechnology.co.uk\n🌐 www.splendidtechnology.co.uk\n\nWebsites | Hosting | Business Email | CRM Solutions | Business Process Automation`;
+    ? `Hi ${name},\n\nI noticed your business doesn't currently have a website. In today's market, most customers search online before making a call — so not having a website means missing out on new enquiries every day.\n\nAt Velynxia, we build professional, mobile-friendly websites starting from just £499. We'd love to help get you online.\n\nWould you be open to a free 15-minute chat this week?\n\nKind regards,\n\nRaja Saravanan\nFounder & Business Development Lead\n\nVelynxia\n\n📞 Mobile: 07723 144910\n📧 raja@splendidtechnology.co.uk\n🌐 www.splendidtechnology.co.uk\n\nWebsites | Hosting | Business Email | CRM Solutions | Business Process Automation`
+    : `Hi ${name},\n\nI came across your website and noticed a few things that could be holding your business back online:\n\n${issueLines || '  • Several improvements available'}\n\nAt Velynxia, we help businesses like yours fix these issues quickly and affordably — with no jargon.\n\nWould you be open to a free 15-minute call this week to see if we can help?\n\nKind regards,\n\nRaja Saravanan\nFounder & Business Development Lead\n\nVelynxia\n\n📞 Mobile: 07723 144910\n📧 raja@splendidtechnology.co.uk\n🌐 www.splendidtechnology.co.uk\n\nWebsites | Hosting | Business Email | CRM Solutions | Business Process Automation`;
   return { subject, message };
 }
 
@@ -333,7 +333,7 @@ function EmailPanel({ prospect, onClose, onSent }: {
             <div className="bg-amber-900/20 border border-amber-700 rounded-xl p-4 space-y-2">
               <div className="text-amber-300 font-semibold text-sm">⚠ SMTP Not Configured</div>
               <p className="text-xs text-slate-400">Add these to <span className="font-mono text-slate-300">.env.local</span> and restart the dev server:</p>
-              <pre className="text-xs text-slate-300 bg-slate-800 rounded p-3 font-mono leading-relaxed">{`SMTP_USER=you@gmail.com\nSMTP_PASS=your-app-password\nSMTP_FROM_NAME=Splendid Technology`}</pre>
+              <pre className="text-xs text-slate-300 bg-slate-800 rounded p-3 font-mono leading-relaxed">{`SMTP_USER=you@gmail.com\nSMTP_PASS=your-app-password\nSMTP_FROM_NAME=Velynxia`}</pre>
               <p className="text-xs text-slate-500">For Gmail: myaccount.google.com → Security → 2-Step Verification → App passwords.</p>
             </div>
           )}

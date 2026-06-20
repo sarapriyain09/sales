@@ -55,7 +55,7 @@ export default function QuoteDetailPage() {
     // Header
     doc.setFontSize(20);
     doc.setTextColor(30, 30, 30);
-    doc.text('SPLENDID TECHNOLOGY', 14, 20);
+    doc.text('VELYNXIA', 14, 20);
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text('splendidtechnology.co.uk', 14, 27);

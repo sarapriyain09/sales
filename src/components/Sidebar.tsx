@@ -27,8 +27,8 @@ export default function Sidebar() {
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-[#2f65c8] shadow-sm flex items-center justify-center text-white font-bold text-sm">ST</div>
           <div>
-            <div className="text-sm font-bold text-[#edf3ff] leading-tight">Splendid Sales</div>
-            <div className="text-xs text-[#b8c8e6]">Splendid Technology</div>
+            <div className="text-sm font-bold text-[#edf3ff] leading-tight">Velynxia Sales</div>
+            <div className="text-xs text-[#b8c8e6]">Velynxia</div>
           </div>
         </div>
       </div>

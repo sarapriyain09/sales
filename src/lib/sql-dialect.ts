@@ -189,9 +189,39 @@ function translateDateFns(sql: string): string {
   return result;
 }
 
+// Postgres has no round(double precision, integer) overload (only
+// round(numeric, integer)). SQLite happily rounds floats, so cast the value
+// argument to numeric when a precision argument is present.
+function translateRound(sql: string): string {
+  const fnRegex = /\bround\s*\(/gi;
+  let result = '';
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = fnRegex.exec(sql)) !== null) {
+    const openParen = match.index + match[0].length - 1;
+    const { args, end } = readArgs(sql, openParen);
+
+    result += sql.slice(lastIndex, match.index);
+    if (args.length === 2) {
+      result += `round((${translateRound(args[0])})::numeric, ${args[1]})`;
+    } else {
+      // Single-arg round (or unexpected arity): leave as-is.
+      result += sql.slice(match.index, end);
+    }
+
+    lastIndex = end;
+    fnRegex.lastIndex = end;
+  }
+
+  result += sql.slice(lastIndex);
+  return result;
+}
+
 export function translateSqliteToPostgres(sql: string): string {
   let out = sql.replace(/\bAUTOINCREMENT\b/g, '');
   out = translateDateFns(out);
+  out = translateRound(out);
   // SQLite LIKE is case-insensitive for ASCII; ILIKE preserves that behavior.
   out = out.replace(/\bLIKE\b/gi, 'ILIKE');
   return out;

@@ -36,7 +36,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'leadId, to, subject and message are required' }, { status: 400 });
   }
 
-  const fromName  = process.env.SMTP_FROM_NAME  ?? 'Splendid Technology';
+  const fromName  = process.env.SMTP_FROM_NAME  ?? 'Velynxia';
   const fromEmail = process.env.SMTP_USER;
   const replyTo   = process.env.SMTP_REPLY_TO ?? fromEmail;
 

@@ -87,7 +87,7 @@ function buildPrompt(task: BdTask, userPrompt: string, leadContext: unknown, cam
 
   if (task === 'linkedin_post') {
     return [
-      'Generate 3 LinkedIn post drafts for Splendid Technology focused on UK manufacturing/engineering decision makers.',
+      'Generate 3 LinkedIn post drafts for Velynxia focused on UK manufacturing/engineering decision makers.',
       'Each post should include: Hook, 3-5 body lines, CTA, and 5 hashtags.',
       'Tone: practical, technical, not hype.',
       userPrompt ? `User guidance: ${userPrompt}` : 'User guidance: none',
@@ -133,7 +133,7 @@ export async function POST(req: NextRequest) {
   }
 
   const systemPrompt = [
-    'You are an AI Business Development Assistant for Splendid Technology.',
+    'You are an AI Business Development Assistant for Velynxia.',
     'You produce practical, credible B2B outputs for UK manufacturing and engineering audiences.',
     'Do not invent facts, prices, or certifications that are not provided.',
   ].join(' ');

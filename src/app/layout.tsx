@@ -6,8 +6,8 @@ import Providers from "./providers";
 const geist = Geist({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Splendid Sales",
-  description: "Splendid Technology — Sales CRM",
+  title: "Velynxia Sales",
+  description: "Velynxia — Sales CRM",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

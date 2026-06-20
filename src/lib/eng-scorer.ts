@@ -1,5 +1,5 @@
 // Engineering Services Lead Scoring — 100-point system
-// Scores UK manufacturing companies for Splendid Engineering Services (CAD/CAE/FEA/CFD)
+// Scores UK manufacturing companies for Velynxia Engineering Services (CAD/CAE/FEA/CFD)
 
 export type EngSector =
   | 'machinery_automation'

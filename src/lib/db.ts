@@ -622,32 +622,32 @@ function initSchema(db: Database.Database) {
                 ? 'CRM Optimisation for {{company_name}}'
                 : 'Digital Growth Support for {{company_name}}';
       const message = vertical === 'engineering'
-        ? 'Hi {{company_name}},\n\nWe help engineering teams with CAD/CAE capacity and delivery support.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology'
+        ? 'Hi {{company_name}},\n\nWe help engineering teams with CAD/CAE capacity and delivery support.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia'
         : vertical === 'software'
-          ? 'Hi {{company_name}},\n\nWe support software teams with rapid delivery, integrations, and quality improvements.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology'
+          ? 'Hi {{company_name}},\n\nWe support software teams with rapid delivery, integrations, and quality improvements.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia'
           : vertical === 'iot'
-            ? 'Hi {{company_name}},\n\nWe help businesses deploy practical IoT solutions, from connected monitoring to dashboard integration.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology'
+            ? 'Hi {{company_name}},\n\nWe help businesses deploy practical IoT solutions, from connected monitoring to dashboard integration.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia'
             : vertical === 'ai_automation'
-              ? 'Hi {{company_name}},\n\nWe design AI automation workflows that reduce manual work and speed up operations.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology'
+              ? 'Hi {{company_name}},\n\nWe design AI automation workflows that reduce manual work and speed up operations.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia'
               : vertical === 'crm'
-                ? 'Hi {{company_name}},\n\nWe help teams improve CRM setup, follow-up workflows, and conversion visibility.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology'
-                : 'Hi {{company_name}},\n\nWe help businesses improve digital presence and lead conversion through practical upgrades.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nSplendid Technology';
+                ? 'Hi {{company_name}},\n\nWe help teams improve CRM setup, follow-up workflows, and conversion visibility.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia'
+                : 'Hi {{company_name}},\n\nWe help businesses improve digital presence and lead conversion through practical upgrades.\n\nWould you be open to a short 15-minute call this week?\n\nKind regards,\nRaja\nVelynxia';
       insertTemplate.run({ channel: 'email', vertical, subject, message });
     }
 
     const existsSms = hasTemplate.get('sms', vertical);
     if (!existsSms) {
       const message = vertical === 'engineering'
-        ? 'Hi {{company_name}}, we provide flexible engineering CAD/CAE support. Open to a quick 15-min call this week? - Splendid Technology'
+        ? 'Hi {{company_name}}, we provide flexible engineering CAD/CAE support. Open to a quick 15-min call this week? - Velynxia'
         : vertical === 'software'
-          ? 'Hi {{company_name}}, we help software teams deliver faster with less rework. Open to a quick 15-min call this week? - Splendid Technology'
+          ? 'Hi {{company_name}}, we help software teams deliver faster with less rework. Open to a quick 15-min call this week? - Velynxia'
           : vertical === 'iot'
-            ? 'Hi {{company_name}}, we build IoT solutions for monitoring and operations. Open to a quick 15-min call this week? - Splendid Technology'
+            ? 'Hi {{company_name}}, we build IoT solutions for monitoring and operations. Open to a quick 15-min call this week? - Velynxia'
             : vertical === 'ai_automation'
-              ? 'Hi {{company_name}}, we build AI automation workflows to save time and cost. Open to a quick 15-min call this week? - Splendid Technology'
+              ? 'Hi {{company_name}}, we build AI automation workflows to save time and cost. Open to a quick 15-min call this week? - Velynxia'
               : vertical === 'crm'
-                ? 'Hi {{company_name}}, we improve CRM workflows and conversion tracking. Open to a quick 15-min call this week? - Splendid Technology'
-                : 'Hi {{company_name}}, we help improve digital growth and conversion. Open to a quick 15-min call this week? - Splendid Technology';
+                ? 'Hi {{company_name}}, we improve CRM workflows and conversion tracking. Open to a quick 15-min call this week? - Velynxia'
+                : 'Hi {{company_name}}, we help improve digital growth and conversion. Open to a quick 15-min call this week? - Velynxia';
       insertTemplate.run({ channel: 'sms', vertical, subject: null, message });
     }
   }

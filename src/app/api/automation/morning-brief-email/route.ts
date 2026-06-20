@@ -120,11 +120,11 @@ export async function POST(req: NextRequest) {
 
   const brief = await buildMorningBrief();
 
-  const fromName = process.env.SMTP_FROM_NAME ?? 'Splendid Technology';
+  const fromName = process.env.SMTP_FROM_NAME ?? 'Velynxia';
   const fromEmail = process.env.SMTP_USER;
   const replyTo = process.env.SMTP_REPLY_TO ?? fromEmail;
 
-  const subject = `Splendid CRM Morning Brief - ${briefDate}`;
+  const subject = `Velynxia CRM Morning Brief - ${briefDate}`;
   const lines = [
     `Morning Brief (${briefDate})`,
     '',
